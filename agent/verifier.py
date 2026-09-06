@@ -303,6 +303,20 @@ def verify_task_result(task_type: str, state_data: dict) -> tuple[bool, list[str
         notes.extend(v_notes)
         ok = ok and v_ok
 
+    elif task_type in ("presentation_generation", "presentation"):
+        output_files = state_data.get("output_files", [])
+        if output_files:
+            for f in output_files:
+                p = Path(f)
+                if p.exists() and p.stat().st_size > 100:
+                    notes.append(f"✅ PowerPoint presentation verified: {p.name} ({p.stat().st_size:,} bytes)")
+                else:
+                    notes.append(f"❌ Presentation file missing or empty: {f}")
+                    ok = False
+        else:
+            notes.append("❌ No presentation output files generated")
+            ok = False
+
     elif task_type in ("document", "document_analysis", "report_generation"):
         v_ok, v_notes = verify_inspection_output(state_data)
         notes.extend(v_notes)

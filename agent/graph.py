@@ -31,6 +31,8 @@ from document.pdf_processor import process_pdf
 from document.ocr import ocr_pdf_pages
 from document.vision import analyze_image_file
 from tools.docx_generator import create_maintenance_approval_note
+from tools.pptx_generator import create_maintenance_approval_pptx, create_presentation_from_markdown
+from tools.files import get_output_path
 
 
 # ─── State Definition ─────────────────────────────────────────────────────────
@@ -274,7 +276,8 @@ def node_execute_code_generation(state: AgentStateDict) -> AgentStateDict:
         if "sandbox_result" in tool_results:
             sr = tool_results["sandbox_result"]
             status = "✅ All tests passed" if sr.get("success") else f"⚠️ Tests failed ({sr.get('tests_passed')}/{sr.get('tests_total')})"
-            resp_text += f"\n\n**Sandbox Execution**: {status}\n```\n{sr.get('stdout', '')[:400]}\n```"
+            out = sr.get('test_output') or sr.get('stdout') or sr.get('stderr') or 'No test output'
+            resp_text += f"\n\n**Sandbox Execution**: {status}\n```\n{out[:600]}\n```"
 
         return {
             "generated_code": code,
@@ -295,6 +298,13 @@ def node_execute_code_generation(state: AgentStateDict) -> AgentStateDict:
 def node_execute_code_execution(state: AgentStateDict) -> AgentStateDict:
     """Execute untrusted code inside the isolated Docker sandbox with stdin."""
     code = state.get("generated_code") or state.get("user_query", "")
+    code_match = re.search(r"```(?:python)?\s*\n(.*?)\n```", code, re.DOTALL)
+    if code_match:
+        code = code_match.group(1).strip()
+    elif "in sandbox:" in code.lower():
+        idx = code.lower().find("in sandbox:")
+        code = code[idx + len("in sandbox:"):].strip()
+
     stdin = state.get("stdin", "")
     lang = state.get("language", "python")
 
@@ -335,7 +345,7 @@ def node_execute_knowledge_query(state: AgentStateDict) -> AgentStateDict:
 
     _emit_event(state, "RAG_REQUESTED", {"query": query[:100], "model": model})
 
-    chunks = retrieve_context(query=query, user_context=user_context, top_k=5)
+    chunks = retrieve_context(query=query, user_context=user_context, top_k=3)
 
     sources = []
     context_parts = []
@@ -394,6 +404,13 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
             ocr_text = ocr_pdf_pages(pdf_p, p_res.get("scanned_pages"))
             raw_text += "\n" + ocr_text
 
+    img_files = [f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp"))]
+    for img_p in img_files:
+        _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "vision", "file": Path(img_p).name})
+        v_res = analyze_image_file(img_p, prompt="Extract all equipment name, tag, measurements, defect findings, and observations from this image.")
+        if v_res.get("text"):
+            raw_text += f"\n[IMAGE ANALYSIS ({Path(img_p).name})]\n" + v_res["text"]
+
     # Extract structured findings
     prompt = f"Extract equipment_name, equipment_id, inspection_date, findings (list), measurements (dict), severity, recommendations as JSON from this text:\n\n{raw_text[:4000]}"
     llm_resp = ollama.generate(model=model, prompt=prompt, temperature=0.1)
@@ -410,25 +427,31 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
 
     # Generate Word Document if requested
     equip_id = extracted_data.get("equipment_id") or "EQUIP-001"
-    doc_path = create_maintenance_approval_note(
-        equipment_id=equip_id,
+    safe_id = re.sub(r"[^\w\-]", "_", str(equip_id))
+    out_path = get_output_path(f"{safe_id}_Maintenance_Approval_Note.docx")
+    
+    doc_res = create_maintenance_approval_note(
         equipment_name=extracted_data.get("equipment_name", "Industrial Equipment"),
+        equipment_id=equip_id,
+        inspection_date=extracted_data.get("inspection_date", "Unknown"),
         findings=extracted_data.get("findings", []),
         measurements=extracted_data.get("measurements", {}),
-        sop_references=[s.get("document", "SOP") for s in sops],
+        recommendations=extracted_data.get("recommendations", "Review findings and perform maintenance."),
+        sop_references=[{"document": s.get("document", "SOP"), "text": s.get("text", "")} for s in sops],
+        ai_reasoning="Generated based on automated document analysis.",
+        output_path=out_path,
         risk_level=extracted_data.get("severity", "Medium"),
-        approver="AI Maintenance System",
     )
-    if doc_path and Path(doc_path).exists():
-        output_files.append(str(doc_path))
-        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "docx_generator", "output_file": Path(doc_path).name})
+    if doc_res and doc_res.get("success"):
+        output_files.append(doc_res["path"])
+        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "docx_generator", "output_file": Path(doc_res["path"]).name})
 
     response_text = (
         f"**Inspection & Document Analysis Complete**:\n\n"
         f"- Equipment: {extracted_data.get('equipment_name')}\n"
         f"- Tag: {extracted_data.get('equipment_id', 'N/A')}\n"
         f"- Severity: {extracted_data.get('severity', 'Medium')}\n"
-        f"- Deliverable Generated: {Path(doc_path).name if doc_path else 'None'}"
+        f"- Deliverable Generated: {Path(out_path).name if doc_res and doc_res.get('success') else 'None'}"
     )
 
     return {
@@ -436,6 +459,43 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
         "retrieved_context": sops,
         "output_files": output_files,
         "generated_response": response_text,
+    }
+
+
+# ─── Node 6b: Vision Analysis ──────────────────────────────────────────────────
+
+def node_execute_vision_analysis(state: AgentStateDict) -> AgentStateDict:
+    """Analyze uploaded industrial photograph or diagram using local multimodal vision model."""
+    files = state.get("uploaded_files", [])
+    query = state.get("user_query", "")
+    model = state.get("selected_model") or get_available_model("vision") or "llava-phi3:latest"
+
+    img_files = [f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp"))]
+    if not img_files:
+        for cand in [Path("workspace/uploads/inspection_image.jpg"), Path("demo_data/inspection_image.jpg")]:
+            if cand.exists():
+                img_files = [str(cand)]
+                break
+
+    if not img_files:
+        return {
+            "generated_response": "No image file provided for vision analysis. Please attach or upload an inspection image.",
+        }
+
+    target_img = img_files[0]
+    _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "vision", "model": model, "file": Path(target_img).name})
+
+    res = analyze_image_file(target_img, prompt=query, model=model)
+    vision_text = res.get("text", "")
+
+    tool_results = dict(state.get("tool_results") or {})
+    tool_results["vision_text"] = vision_text
+
+    _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "vision", "length": len(vision_text)})
+
+    return {
+        "tool_results": tool_results,
+        "generated_response": vision_text,
     }
 
 
@@ -455,6 +515,125 @@ def node_execute_general_chat(state: AgentStateDict) -> AgentStateDict:
 
     return {
         "generated_response": resp,
+    }
+
+
+# ─── Node 7b: Presentation Generation ──────────────────────────────────────────
+
+def node_execute_presentation(state: AgentStateDict) -> AgentStateDict:
+    """Synthesize presentation structure and generate PowerPoint (.pptx) deliverable."""
+    query = state.get("user_query", "")
+    model = state.get("selected_model") or get_available_model("general") or "llama3.1:8b"
+    output_files = list(state.get("output_files") or [])
+
+    _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "pptx_generator", "task": "Synthesizing presentation slides"})
+
+    # Check if the query already provides structured markdown slides
+    has_markdown_slides = bool(
+        re.search(r"slide\s*\d+", query, re.IGNORECASE) or
+        ("---" in query and "####" in query) or
+        ("### " in query and "#### " in query)
+    )
+
+    slides_content = ""
+    if has_markdown_slides:
+        slides_content = query
+    else:
+        sys_prompt = (
+            "You are an expert presentation designer for OffAir AI Sovereign Workbench. "
+            "Generate clean, highly structured presentation slides in markdown format based on the user's topic.\n"
+            "Format rules:\n"
+            "- Start with ### Presentation Title\n"
+            "- Subtitle line wrapped in asterisks: *Subtitle or Organization*\n"
+            "- Separate each slide with ---\n"
+            "- Each slide header: #### Slide X: Title\n"
+            "- 3 to 4 concise bullet points (- point)\n"
+            "- Optional source line: *Source: Citations*\n"
+            "Be factual, concise, and structured. Do not include conversational intro or outro."
+        )
+        try:
+            slides_content = ollama.generate(
+                model=model,
+                prompt=f"Create presentation slides for: {query}",
+                system=sys_prompt,
+                temperature=0.3,
+                max_tokens=1500,
+            )
+        except Exception:
+            slides_content = ""
+
+        # Fallback structured outline if Ollama is offline or did not format markdown
+        if not slides_content or not ("####" in slides_content or "Slide" in slides_content):
+            topic = re.sub(
+                r"(?i)\b(?:make|generate|create)\s+(?:a\s+)?(?:ppt|pptx|powerpoint|presentation|slides)\s+(?:of\s+\d+\s+slides\s+)?(?:on\s+)?",
+                "",
+                query,
+            ).strip() or "Technical Analysis"
+            topic_title = topic.title()
+            slides_content = (
+                f"### {topic_title}: Technical Analysis\n"
+                f"*OffAir AI | Air-Gapped Sovereign System*\n\n"
+                f"---\n\n"
+                f"#### Slide 1: Current State & Baseline\n"
+                f"- Primary technical benchmarks and operating indicators for {topic}\n"
+                f"- Current performance envelope and baseline measurements\n"
+                f"- Key variances identified against design standards\n"
+                f"*Source: Sovereign Technical Records*\n\n"
+                f"---\n\n"
+                f"#### Slide 2: Critical Parameters & Analysis\n"
+                f"- Quantitative parameters and stress conditions\n"
+                f"- Systemic risk factors and dependency matrices\n"
+                f"- Operational resilience and threshold tolerances\n"
+                f"*Source: Engineering Standards*\n\n"
+                f"---\n\n"
+                f"#### Slide 3: Thresholds & Risk Vectors\n"
+                f"- Warning indicators and automatic trip thresholds\n"
+                f"- Mitigation protocols and containment pathways\n"
+                f"- Safety margins and compliance verifications\n"
+                f"*Source: Safety Governance Framework*\n\n"
+                f"---\n\n"
+                f"#### Slide 4: Action Framework & Recommendations\n"
+                f"- Immediate high-priority remediation measures\n"
+                f"- Scheduled maintenance and monitoring milestones\n"
+                f"- Sovereign verification and compliance sign-off\n"
+                f"*Source: Operational Directives*"
+            )
+
+    # Derive clean title and safe filename
+    m_title = re.search(r"###\s+([^\n]+)", slides_content)
+    raw_title = m_title.group(1).strip() if m_title else query[:30]
+    safe_title = re.sub(r"[^\w\-]", "_", raw_title[:35]).strip("_") or "Presentation"
+    filename = f"{safe_title}.pptx"
+    out_path = get_output_path(filename)
+
+    ppt_res = create_presentation_from_markdown(
+        slides_content,
+        default_title=raw_title,
+        output_path=out_path,
+    )
+
+    if ppt_res.get("success"):
+        output_files.append(str(out_path))
+        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {
+            "tool": "pptx_generator",
+            "output_file": filename,
+            "size": ppt_res.get("size", 0),
+        })
+        final_text = (
+            f"{slides_content.strip()}\n\n"
+            f"---\n"
+            f"✅ **PowerPoint Presentation Generated:** `{filename}` ({ppt_res.get('size', 0):,} bytes)"
+        )
+    else:
+        final_text = (
+            f"{slides_content.strip()}\n\n"
+            f"---\n"
+            f"⚠️ **PowerPoint Generation Note:** Presentation synthesis completed; export error: {ppt_res.get('error')}"
+        )
+
+    return {
+        "output_files": output_files,
+        "generated_response": final_text,
     }
 
 
@@ -487,15 +666,35 @@ def node_execute_multi_step(state: AgentStateDict) -> AgentStateDict:
             calc_res = pump_efficiency(input_power_kw=75.0, output_power_kw=62.0)
             tool_results["calculations"] = calc_res
         elif tool == "docx_generator":
-            p = create_maintenance_approval_note(
-                equipment_id="P-104",
+            out_path = get_output_path("P_104_Maintenance_Approval_Note.docx")
+            doc_res = create_maintenance_approval_note(
                 equipment_name="Crude Oil Pump",
+                equipment_id="P-104",
+                inspection_date="2024-01-20",
                 findings=["Vibration elevated", "Flow stable"],
                 measurements={"efficiency": f"{calc_res.result}%" if calc_res else "82.6%"},
-                sop_references=["SOP-PUMP-01"],
+                recommendations="Investigate non-drive end bearing noise.",
+                sop_references=[{"document": "SOP-PUMP-01", "text": "Pump maintenance guidelines"}],
+                ai_reasoning="Risk is elevated due to vibration.",
+                output_path=out_path,
             )
-            if p and Path(p).exists():
-                output_files.append(str(p))
+            if doc_res and doc_res.get("success"):
+                output_files.append(doc_res["path"])
+        elif tool == "pptx_generator":
+            out_path = get_output_path("P_104_Maintenance_Approval_Note.pptx")
+            ppt_res = create_maintenance_approval_pptx(
+                equipment_name="Crude Oil Pump",
+                equipment_id="P-104",
+                inspection_date="2024-01-20",
+                findings=["Vibration elevated", "Flow stable"],
+                measurements={"efficiency": f"{calc_res.result}%" if calc_res else "82.6%"},
+                recommendations="Investigate non-drive end bearing noise.",
+                sop_references=[{"document": "SOP-PUMP-01", "text": "Pump maintenance guidelines"}],
+                output_path=out_path,
+                risk_level="HIGH",
+            )
+            if ppt_res and ppt_res.get("success"):
+                output_files.append(ppt_res["path"])
 
         _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": tool, "status": "done"})
 
@@ -563,7 +762,11 @@ def route_by_task(state: AgentStateDict) -> str:
         return "execute_code_execution"
     elif t == TaskType.KNOWLEDGE_QUERY:
         return "execute_knowledge_query"
-    elif t in (TaskType.DOCUMENT_ANALYSIS, TaskType.REPORT_GENERATION, TaskType.VISION_ANALYSIS):
+    elif t == TaskType.VISION_ANALYSIS:
+        return "execute_vision_analysis"
+    elif t == TaskType.PRESENTATION_GENERATION or "pptx_generator" in state.get("selected_tools", []):
+        return "execute_presentation"
+    elif t in (TaskType.DOCUMENT_ANALYSIS, TaskType.REPORT_GENERATION):
         return "execute_document_analysis"
     return "execute_general_chat"
 
@@ -579,6 +782,8 @@ def build_agent_graph():
     workflow.add_node("execute_code_generation", node_execute_code_generation)
     workflow.add_node("execute_code_execution", node_execute_code_execution)
     workflow.add_node("execute_knowledge_query", node_execute_knowledge_query)
+    workflow.add_node("execute_vision_analysis", node_execute_vision_analysis)
+    workflow.add_node("execute_presentation", node_execute_presentation)
     workflow.add_node("execute_document_analysis", node_execute_document_analysis)
     workflow.add_node("execute_general_chat", node_execute_general_chat)
     workflow.add_node("execute_multi_step", node_execute_multi_step)
@@ -594,6 +799,8 @@ def build_agent_graph():
             "execute_code_generation": "execute_code_generation",
             "execute_code_execution": "execute_code_execution",
             "execute_knowledge_query": "execute_knowledge_query",
+            "execute_vision_analysis": "execute_vision_analysis",
+            "execute_presentation": "execute_presentation",
             "execute_document_analysis": "execute_document_analysis",
             "execute_general_chat": "execute_general_chat",
             "execute_multi_step": "execute_multi_step",
@@ -604,6 +811,8 @@ def build_agent_graph():
     workflow.add_edge("execute_code_generation", "verify")
     workflow.add_edge("execute_code_execution", "verify")
     workflow.add_edge("execute_knowledge_query", "verify")
+    workflow.add_edge("execute_vision_analysis", "verify")
+    workflow.add_edge("execute_presentation", "verify")
     workflow.add_edge("execute_document_analysis", "verify")
     workflow.add_edge("execute_general_chat", "verify")
     workflow.add_edge("execute_multi_step", "verify")

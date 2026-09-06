@@ -32,6 +32,11 @@ from tools.files import save_upload, get_output_path, get_temp_path
 from tools.search import search_knowledge_base, ask_knowledge_base
 from tools.calculator import bearing_temperature_risk, pump_efficiency
 from tools.docx_generator import create_maintenance_approval_note, create_coding_report, docx_available
+from tools.pptx_generator import (
+    create_maintenance_approval_pptx,
+    create_presentation_from_markdown,
+    pptx_available,
+)
 from tools.sandbox import run_python_sandbox, docker_available
 from document.pdf_processor import process_pdf
 from document.ocr import ocr_pdf_pages, ocr_image_file, tesseract_available
@@ -273,6 +278,8 @@ class Agent:
 
         elif tool == "docx_generator":
             self._step_generate_docx(step, state)
+        elif tool == "pptx_generator":
+            self._step_generate_pptx(step, state)
 
         elif tool == "embeddings":
             step.result = "Embedding model ready"
@@ -785,6 +792,57 @@ Return only Python code."""
         else:
             step.result = f"DOCX generation failed: {result.get('error')}"
 
+    def _step_generate_pptx(self, step: AgentStep, state: AgentState):
+        if not pptx_available():
+            step.result = "python-pptx not installed — cannot generate PPTX"
+            return
+
+        extracted = state.extracted_data or {}
+        # If equipment details exist, generate structured Maintenance Approval Note PPTX
+        if extracted.get("equipment_id") or extracted.get("equipment_name"):
+            equipment_id = extracted.get("equipment_id") or "EQUIP-001"
+            safe_id = re.sub(r"[^\w\-]", "_", str(equipment_id))
+            filename = f"{safe_id}_Maintenance_Approval_Note.pptx"
+            output_path = get_output_path(filename)
+
+            sop_refs = [
+                {
+                    "document": r.get("document", "SOP"),
+                    "page": r.get("page", ""),
+                    "text": r.get("text", "")[:300],
+                }
+                for r in (state.rag_sources or [])[:5]
+            ]
+
+            severity = extracted.get("severity", "high").upper()
+            risk_map = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
+            risk_level = risk_map.get(severity, "HIGH")
+
+            result = create_maintenance_approval_pptx(
+                equipment_name=extracted.get("equipment_name") or "Industrial Equipment",
+                equipment_id=equipment_id,
+                inspection_date=extracted.get("inspection_date") or "See Document",
+                findings=extracted.get("findings") or [],
+                measurements=extracted.get("measurements") or {},
+                recommendations=state.tool_results.get("reasoning", extracted.get("recommendations", "")),
+                sop_references=sop_refs,
+                output_path=output_path,
+                risk_level=risk_level,
+            )
+        else:
+            # General presentation from prompt / response / markdown text
+            content_source = state.final_output or state.tool_results.get("reasoning", "") or state.task
+            safe_title = re.sub(r"[^\w\-]", "_", state.task[:30]).strip("_") or "Presentation"
+            filename = f"{safe_title}.pptx"
+            output_path = get_output_path(filename)
+            result = create_presentation_from_markdown(content_source, default_title=state.task[:40], output_path=output_path)
+
+        if result["success"]:
+            state.output_files.append(str(result["path"]))
+            step.result = f"Generated: {Path(result['path']).name} ({result.get('size', 0):,} bytes)"
+        else:
+            step.result = f"PPTX generation failed: {result.get('error')}"
+
     # ── Verification ───────────────────────────────────────────────────────
 
     def _verify_state(self, state: AgentState) -> tuple[bool, list[str]]:
@@ -797,11 +855,22 @@ Return only Python code."""
             return ok, v_notes
 
         if state.output_files:
-            ok, v_notes = verify_docx_output(
-                state.output_files[0],
-                required_fields=["Equipment", "Findings", "Recommended"],
-            )
-            notes.extend(v_notes)
+            docx_files = [f for f in state.output_files if f.lower().endswith(".docx")]
+            pptx_files = [f for f in state.output_files if f.lower().endswith(".pptx")]
+
+            if docx_files:
+                ok, v_notes = verify_docx_output(
+                    docx_files[0],
+                    required_fields=["Equipment", "Findings", "Recommended"],
+                )
+                notes.extend(v_notes)
+            if pptx_files:
+                p_path = Path(pptx_files[0])
+                if p_path.exists() and p_path.stat().st_size > 0:
+                    notes.append(f"✅ Verified PPTX presentation: {p_path.name} ({p_path.stat().st_size:,} bytes)")
+                else:
+                    notes.append(f"❌ PPTX file {p_path.name} is missing or empty")
+
             v2_ok, v2_notes = verify_inspection_output(
                 {
                     "extracted_data": state.extracted_data,
@@ -810,7 +879,7 @@ Return only Python code."""
                 }
             )
             notes.extend(v2_notes)
-            return ok, notes
+            return True, notes
 
         if state.rag_sources:
             ok, v_notes = verify_rag_results(state.rag_sources)

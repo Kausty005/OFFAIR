@@ -19,8 +19,18 @@ from security.audit import log
 try:
     import pytesseract
     from PIL import Image
+    # Point pytesseract at the known install location (not always on PATH on Windows)
+    _TESS_PATHS = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        r"C:\Users\kaust\AppData\Local\Tesseract-OCR\tesseract.exe",
+    ]
+    for _p in _TESS_PATHS:
+        if os.path.isfile(_p):
+            pytesseract.pytesseract.tesseract_cmd = _p
+            break
     _TESSERACT_AVAILABLE = True
-    # Try to verify tesseract binary
+    # Verify the binary actually responds
     try:
         pytesseract.get_tesseract_version()
     except Exception:

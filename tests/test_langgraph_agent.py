@@ -81,3 +81,25 @@ def test_backward_compatibility():
     assert len(steps_received) > 0
     assert state.status == "done"
     assert "85" in state.final_output or "efficiency" in state.final_output.lower()
+
+
+def test_presentation_generation():
+    """TEST 10: Presentation generation creates verified PPTX deliverable."""
+    from pathlib import Path
+    agent = Agent()
+    markdown_slides = (
+        "### Test Climate Presentation\n"
+        "*OffAir AI Sovereign System*\n\n"
+        "---\n\n"
+        "#### Slide 1: Introduction\n"
+        "- Global temperature tracking\n"
+        "- Renewable energy expansion\n"
+        "*Source: IPCC AR6*"
+    )
+    state = agent.run(f"make a ppt of 1 slide on climate change\n{markdown_slides}")
+
+    assert state.task_type in (TaskType.PRESENTATION_GENERATION, "presentation_generation")
+    assert state.verified is True
+    assert len(state.output_files) > 0
+    assert any(f.endswith(".pptx") and Path(f).exists() for f in state.output_files)
+

@@ -32,7 +32,10 @@ def plan_inspection_task(state: AgentState) -> AgentState:
     state.add_step("Extract structured findings (equipment, measurements, defects)", tool="llm_extraction")
     state.add_step("Search local knowledge base for relevant SOPs", tool="rag")
     state.add_step("Reason over findings and SOP context", tool="llm_reasoning")
-    state.add_step("Generate Maintenance Approval Note (DOCX)", tool="docx_generator")
+    if any(k in state.task.lower() for k in ["pptx", "powerpoint", "presentation", "slides", "ppt"]):
+        state.add_step("Generate Maintenance Approval Presentation (PPTX)", tool="pptx_generator")
+    else:
+        state.add_step("Generate Maintenance Approval Note (DOCX)", tool="docx_generator")
     state.add_step("Verify output file and content", tool="verifier")
     return state
 
@@ -84,6 +87,17 @@ def plan_general_task(state: AgentState) -> AgentState:
     return state
 
 
+def plan_presentation_task(state: AgentState) -> AgentState:
+    """Plan for: Content/Query -> Structure Presentation Slides -> Generate PPTX -> Verify."""
+    has_files = bool(state.uploaded_files)
+    if has_files:
+        state.add_step("Process uploaded files", tool="files")
+    state.add_step("Structure presentation content and slides", tool="llm")
+    state.add_step("Generate PowerPoint Presentation (PPTX)", tool="pptx_generator")
+    state.add_step("Verify output presentation file", tool="verifier")
+    return state
+
+
 def create_plan(state: AgentState) -> AgentState:
     """
     Select and build the appropriate plan based on task type.
@@ -100,9 +114,12 @@ def create_plan(state: AgentState) -> AgentState:
     has_pdf = any(f.lower().endswith(".pdf") for f in state.uploaded_files)
 
     is_doc_gen = "word document" in task_lower or "docx" in task_lower
+    is_pptx_gen = any(kw in task_lower for kw in ["pptx", "powerpoint", "slides", "presentation", "make a ppt", "generate a ppt"])
 
     if (is_inspection and has_pdf) or "inspection agent" in task_lower or is_doc_gen:
         return plan_inspection_task(state)
+    elif is_pptx_gen:
+        return plan_presentation_task(state)
     elif task_type == "coding":
         return plan_coding_task(state)
     elif task_type == "vision":

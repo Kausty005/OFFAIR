@@ -49,12 +49,25 @@ def analyze_image_file(
     if not b64:
         return {"error": "Could not read image file", "text": ""}
 
+    # Ground vision model with exact text extracted via local OCR
+    ocr_context = ""
+    try:
+        from document.ocr import ocr_image_file, tesseract_available
+        if tesseract_available():
+            ocr_text = ocr_image_file(image_path)
+            if ocr_text and ocr_text.strip():
+                ocr_context = f"\n\n[Ground-Truth OCR Text Extracted from Diagram]:\n{ocr_text.strip()}\n"
+    except Exception:
+        pass
+
+    effective_prompt = f"{prompt}{ocr_context}" if ocr_context else prompt
+
     log("VISION_ANALYSIS", model=model_name, file=image_path.name, local=True)
 
     try:
         response = ollama.generate(
             model=model_name,
-            prompt=prompt,
+            prompt=effective_prompt,
             system=VISION_SYSTEM_PROMPT,
             images=[b64],
             temperature=0.1,

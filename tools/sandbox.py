@@ -62,6 +62,9 @@ import traceback
 import unittest
 import io
 
+# Prevent early exit if user/generated code invokes unittest.main()
+unittest.main = lambda *args, **kwargs: None
+
 # ─── User Code ───────────────────────────────────────────
 {code}
 
@@ -161,6 +164,7 @@ def run_python_sandbox(
         suffix=".py",
         delete=False,
         prefix="sih_sandbox_",
+        encoding="utf-8",
     ) as f:
         f.write(runner_code)
         script_path = f.name
@@ -187,6 +191,8 @@ def run_python_sandbox(
             docker_cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout + 5,  # Extra buffer for container startup
         )
         elapsed = round(time.time() - t0, 2)
@@ -363,6 +369,8 @@ def run_code_sandbox(
             input=stdin if stdin is not None else "",
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         elapsed = round(time.time() - t0, 3)

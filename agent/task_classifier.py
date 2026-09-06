@@ -22,6 +22,7 @@ class TaskType:
     CALCULATION = "calculation"
     VISION_ANALYSIS = "vision_analysis"
     REPORT_GENERATION = "report_generation"
+    PRESENTATION_GENERATION = "presentation_generation"
 
 
 @dataclass
@@ -82,18 +83,23 @@ _CODE_GENERATION_PATTERNS = [
 ]
 
 _KNOWLEDGE_PATTERNS = [
-    r"\baccording\s+to\s+(?:the\s+)?(?:uploaded\s+)?(?:sop|manual|document|procedure|guidelines)\b",
-    r"\bwhat\s+(?:is|are)\s+the\s+procedure\b",
-    r"\bwhat\s+does\s+(?:the\s+)?(?:sop|manual|policy|safety\s+manual)\s+say\b",
+    r"\baccording\s+to\s+(?:the|our)?\s*(?:uploaded)?\s*(?:\w+\s+)?(?:sop|manual|document|procedure|guidelines)\b",
+    r"\bwhat\s+(?:is|are)\s+(?:the\s+)?procedure\b",
+    r"\bwhat\s+does\s+(?:the|our)?\s*(?:\w+\s+)?(?:sop|manual|policy|safety\s+manual)\s+say\b",
     r"\bsearch\s+(?:the\s+)?(?:knowledge\s+base|kb|docs)\b",
     r"\bstandard\s+operating\s+procedure\b",
     r"\bsafety\s+protocol\b",
+    r"\bsop\b",
+    r"\bsafety\s+manual\b",
+    r"\bknowledge\s+base\b",
+    r"\bprocedure\s+for\b",
 ]
 
 _VISION_PATTERNS = [
-    r"\blook\s+at\s+(?:this\s+)?(?:image|photo|picture|diagram|drawing)\b",
-    r"\banalyze\s+(?:this\s+)?(?:image|photo|picture|diagram|drawing)\b",
-    r"\binspect\s+(?:this\s+)?(?:image|photo|drawing)\b",
+    r"\blook\s+at\s+(?:this\s+)?(?:image|photo|photograph|picture|diagram|drawing)\b",
+    r"\banalyze\s+(?:this\s+)?(?:image|photo|photograph|picture|diagram|drawing|inspection\s+(?:photo|photograph|image))\b",
+    r"\binspect\s+(?:this\s+)?(?:image|photo|photograph|drawing)\b",
+    r"\b(?:inspection\s+)?(?:photo|photograph|image|diagram)\b",
     r"\bp&id\b",
     r"\bpiping\s+and\s+instrumentation\b",
 ]
@@ -102,6 +108,15 @@ _REPORT_PATTERNS = [
     r"\bgenerate\s+(?:a\s+)?(?:maintenance\s+approval\s+note|report|document|docx)\b",
     r"\bcreate\s+(?:a\s+)?(?:word\s+document|docx|approval\s+note|report)\b",
     r"\bmaintenance\s+approval\s+note\b",
+]
+
+_PRESENTATION_PATTERNS = [
+    r"\b(?:make|generate|create)\s+(?:a\s+)?(?:ppt|pptx|powerpoint|slides|presentation)\b",
+    r"\bppt\b",
+    r"\bpptx\b",
+    r"\bpowerpoint\b",
+    r"\bslides\s+on\b",
+    r"\bpresentation\s+on\b",
 ]
 
 _DOCUMENT_ANALYSIS_PATTERNS = [
@@ -298,6 +313,25 @@ def classify_task(
             reason="Document analysis task routed to document extraction and OCR pipeline.",
             confidence=0.90,
             selected_tools=["pdf_processor", "llm_extraction", "rag", "docx_generator", "verifier"],
+        )
+
+    # 7.5. Presentation Generation
+    if any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS):
+        model = get_available_model("general") or "llama3.1:8b"
+        steps = [
+            PlannedStep(1, TaskType.PRESENTATION_GENERATION, "Synthesize presentation slides using local model", "llm"),
+            PlannedStep(2, TaskType.PRESENTATION_GENERATION, "Generate formatted PowerPoint presentation (.pptx)", "pptx_generator"),
+            PlannedStep(3, TaskType.PRESENTATION_GENERATION, "Verify generated presentation file", "verifier"),
+        ]
+        return ClassificationResult(
+            primary_task=TaskType.PRESENTATION_GENERATION,
+            is_multi_step=False,
+            steps=steps,
+            selected_model=model,
+            selected_role="general",
+            reason="Presentation generation request routed to PPTX generator.",
+            confidence=0.92,
+            selected_tools=["llm", "pptx_generator", "verifier"],
         )
 
     # 8. Report Generation

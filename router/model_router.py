@@ -67,6 +67,7 @@ _DOCUMENT_KEYWORDS = [
     r"\bprocedure\b", r"\binspection\b", r"\bmaintenance\b",
     r"\bapproval\b", r"\bnote\b", r"\bmemo\b", r"\bletter\b",
     r"\bcertificate\b", r"\bspecification\b",
+    r"\bppt\b", r"\bpptx\b", r"\bpowerpoint\b", r"\bslides\b", r"\bpresentation\b",
 ]
 
 

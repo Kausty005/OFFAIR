@@ -11,8 +11,10 @@ import os
 import shutil
 import sys
 import time
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +31,11 @@ from models.model_registry import get_all_models, get_available_model
 import models.ollama_client as ollama_client
 from security.audit import log, get_recent_logs
 from tools.files import get_output_path
+from tools.pptx_generator import (
+    create_maintenance_approval_pptx,
+    create_presentation_from_markdown,
+    pptx_available,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,6 +52,9 @@ app.add_middleware(
 
 # Task queue registry: task_id -> asyncio.Queue
 task_queues: dict[str, asyncio.Queue] = {}
+# Task state registry: task_id -> AgentState
+task_states: dict[str, Any] = {}
+last_completed_state: Optional[Any] = None
 
 UPLOAD_DIR = Path("workspace/uploads")
 OUTPUT_DIR = Path("workspace/outputs")
@@ -168,6 +178,9 @@ async def run_agent_endpoint(
                 has_pdf=has_pdf,
                 user_context=u_context,
             )
+            task_states[task_id] = state
+            global last_completed_state
+            last_completed_state = state
             _push("complete", {
                 "final_output": state.final_output or "",
                 "verified": state.verified,
@@ -340,10 +353,134 @@ async def download_file_by_path(path: str):
 
 
 # ─────────────────────────────────────────────────────────────
-# Knowledge Base & RAG Endpoints
+# PPTX Presentation Generation Endpoint
 # ─────────────────────────────────────────────────────────────
 
 from pydantic import BaseModel
+
+class GeneratePPTXRequest(BaseModel):
+    task_id: Optional[str] = None
+    equipment_name: Optional[str] = None
+    equipment_id: Optional[str] = None
+    inspection_date: Optional[str] = None
+    findings: Optional[list[str]] = None
+    measurements: Optional[dict] = None
+    recommendations: Optional[str] = None
+    sop_references: Optional[list[dict]] = None
+    risk_level: Optional[str] = "HIGH"
+    title: Optional[str] = None
+    content: Optional[str] = None
+    format: Optional[str] = "file"  # "file" or "json"
+
+
+def _build_pptx_for_state_or_data(
+    task_id: Optional[str] = None,
+    req_data: Optional[GeneratePPTXRequest] = None,
+) -> dict:
+    if not pptx_available():
+        raise HTTPException(status_code=503, detail="python-pptx is not installed")
+
+    # 1. Retrieve state from task_id or last_completed_state
+    state = None
+    if task_id and task_id in task_states:
+        state = task_states[task_id]
+    elif last_completed_state is not None:
+        state = last_completed_state
+
+    # 2. Extract fields
+    extracted = (state.extracted_data or {}) if state else {}
+    req = req_data or GeneratePPTXRequest()
+
+    eq_name = req.equipment_name or extracted.get("equipment_name") or "Industrial Equipment"
+    eq_id = req.equipment_id or extracted.get("equipment_id") or "EQUIP-001"
+    insp_date = req.inspection_date or extracted.get("inspection_date") or datetime.now().strftime("%Y-%m-%d")
+    findings = req.findings or extracted.get("findings") or ["No critical anomalies noted during inspection."]
+    measurements = req.measurements or extracted.get("measurements") or {}
+    recommendations = req.recommendations or (state.tool_results.get("reasoning") if state else "") or extracted.get("recommendations") or "Verify equipment parameters and schedule routine maintenance."
+    risk_level = req.risk_level or extracted.get("severity", "HIGH").upper()
+
+    # SOP references
+    sop_refs = req.sop_references
+    if not sop_refs and state and state.rag_sources:
+        sop_refs = [
+            {
+                "document": r.get("document", "SOP"),
+                "page": r.get("page", ""),
+                "text": r.get("text", "")[:300],
+            }
+            for r in state.rag_sources[:5]
+        ]
+    if not sop_refs:
+        sop_refs = [{"document": "SOP-GENERAL", "page": "1", "text": "Standard operational guidelines applied."}]
+
+    # If arbitrary content/markdown was sent, use markdown presentation builder
+    if req.content:
+        safe_title = re.sub(r"[^\w\-]", "_", (req.title or "Presentation")[:30]).strip("_") or "Presentation"
+        filename = f"{safe_title}.pptx"
+        out_path = OUTPUT_DIR / filename
+        res = create_presentation_from_markdown(
+            req.content,
+            default_title=req.title or "Presentation",
+            output_path=out_path
+        )
+    else:
+        safe_id = re.sub(r"[^\w\-]", "_", str(eq_id))
+        filename = f"{safe_id}_Maintenance_Approval_Note.pptx"
+        out_path = OUTPUT_DIR / filename
+        res = create_maintenance_approval_pptx(
+            equipment_name=eq_name,
+            equipment_id=eq_id,
+            inspection_date=insp_date,
+            findings=findings,
+            measurements=measurements,
+            recommendations=recommendations,
+            sop_references=sop_refs,
+            output_path=out_path,
+            risk_level=risk_level,
+        )
+
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("error", "Failed to generate PPTX"))
+
+    return {
+        "success": True,
+        "path": str(out_path),
+        "filename": filename,
+        "size": res.get("size", 0),
+        "verification_question": "Is the generated PPTX correctly formatted and includes all inspection details?"
+    }
+
+
+@app.get("/api/generate-pptx")
+async def generate_pptx_get(task_id: Optional[str] = None, format: Optional[str] = "file"):
+    """Generate or download PPTX presentation via GET request."""
+    result = _build_pptx_for_state_or_data(task_id=task_id)
+    if format == "json":
+        return result
+    return FileResponse(
+        path=result["path"],
+        filename=result["filename"],
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+@app.post("/api/generate-pptx")
+async def generate_pptx_post(req: Optional[GeneratePPTXRequest] = None):
+    """Generate PPTX presentation via POST request with optional payload."""
+    req_data = req or GeneratePPTXRequest()
+    result = _build_pptx_for_state_or_data(task_id=req_data.task_id, req_data=req_data)
+    if req_data.format == "file":
+        return FileResponse(
+            path=result["path"],
+            filename=result["filename"],
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
+# Knowledge Base & RAG Endpoints
+# ─────────────────────────────────────────────────────────────
 
 class RAGSearchRequest(BaseModel):
     query: str
