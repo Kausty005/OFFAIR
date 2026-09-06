@@ -32,6 +32,11 @@ ollama:
   base_url: "http://localhost:11434"
   timeout: 300
   max_retries: 3
+  # GPU acceleration — offload all layers to RTX 4050 VRAM
+  num_gpu: 99          # 99 = load as many layers as VRAM allows (effectively all)
+  num_ctx: 4096        # context window (tokens); increase if you have spare VRAM
+  num_thread: 8        # CPU threads for any CPU-side work (set to your core count)
+  num_batch: 512       # prompt eval batch size — larger = faster prefill
 
 # --- Document Processing ---
 document:

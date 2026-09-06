@@ -29,6 +29,15 @@ OLLAMA_BASE = _cfg["ollama"]["base_url"]
 TIMEOUT = _cfg["ollama"]["timeout"]
 MAX_RETRIES = _cfg["ollama"]["max_retries"]
 
+# GPU acceleration options — read from config
+_ollama_cfg = _cfg.get("ollama", {})
+_GPU_OPTIONS = {
+    "num_gpu": _ollama_cfg.get("num_gpu", 99),      # offload all layers to VRAM
+    "num_ctx": _ollama_cfg.get("num_ctx", 4096),    # context window
+    "num_thread": _ollama_cfg.get("num_thread", 8), # CPU threads
+    "num_batch": _ollama_cfg.get("num_batch", 512), # prefill batch size
+}
+
 # Validate at import time
 assert_local_endpoint(OLLAMA_BASE, "Ollama base URL")
 
@@ -92,6 +101,7 @@ def generate(
         "prompt": prompt,
         "stream": False,
         "options": {
+            **_GPU_OPTIONS,           # GPU acceleration
             "temperature": temperature,
             "num_predict": max_tokens,
         },
@@ -127,6 +137,7 @@ def chat(
         "messages": messages,
         "stream": False,
         "options": {
+            **_GPU_OPTIONS,           # GPU acceleration
             "temperature": temperature,
             "num_predict": max_tokens,
         },
