@@ -34,7 +34,7 @@ Start-Sleep -Seconds 2
 Write-Host ""
 Write-Host "[3/3] Starting Next.js frontend on :5000..." -ForegroundColor Yellow
 $npmCmd = if ($IsWindows) { "npm.cmd" } else { "npm" }
-$frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev", "--", "-p", "5000" `
+$frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev" `
     -WorkingDirectory (Join-Path $PSScriptRoot "frontend") -PassThru -WindowStyle Normal
 Write-Host "      [OK] Frontend starting (PID $($frontend.Id))" -ForegroundColor Green
 

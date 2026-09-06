@@ -25,6 +25,16 @@ _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 _MAX_FILE_BYTES = 50 * 1024 * 1024
 
 
+def format_file_size(size_in_bytes: int) -> str:
+    """Format byte count into human readable B / KB / MB."""
+    if size_in_bytes < 1024:
+        return f"{size_in_bytes} B"
+    elif size_in_bytes < 1024 * 1024:
+        return f"{size_in_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_in_bytes / (1024 * 1024):.2f} MB"
+
+
 def safe_filename(name: str, default: str = "output") -> str:
     """Strip path traversal characters and sanitize filename."""
     name = Path(name).name

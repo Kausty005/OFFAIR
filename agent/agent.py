@@ -11,7 +11,7 @@ import sys
 import json
 import time
 from pathlib import Path
-from typing import Optional, Callable, Generator
+from typing import Any, Optional, Callable, Generator
 
 _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)
@@ -252,6 +252,14 @@ class Agent:
 
         elif tool == "vision":
             self._step_vision(step, state)
+
+        elif tool in ("merge_pdf", "split_pdf", "extract_pages", "rotate_pdf", "delete_pages", "reorder_pages", "pdf_to_images", "images_to_pdf", "docx_to_text", "pdf_to_text", "compress_pdf", "strip_metadata", "ocr_pdf", "ocr_image", "crop_pdf", "resize_pdf", "add_blank_page", "duplicate_page"):
+            from document_tools.agent_adapter import execute_document_tool
+            res = execute_document_tool(tool_name=tool, params={}, uploaded_files=state.uploaded_files, query=state.task)
+            if res.output_files:
+                state.output_files.extend(res.output_files)
+            state.final_output = res.message
+            step.complete(res.message)
 
         # ── LLM steps ────────────────────────────────────────────────────
         elif tool == "llm_extraction":
