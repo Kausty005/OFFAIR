@@ -73,21 +73,60 @@ async def upload_file(file: UploadFile = File(...)):
 # ─────────────────────────────────────────────────────────────
 # Agent Run + SSE Stream
 # ─────────────────────────────────────────────────────────────
+# Interactive Code Execution (Direct Sandbox - No LLM overhead)
+# ─────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel, Field
+
+class CodeExecuteRequest(BaseModel):
+    code: str = Field(..., description="Code to execute in Docker sandbox")
+    language: Optional[str] = Field("python", description="Language of code")
+    stdin: Optional[str] = Field("", description="Standard input (supports multiline)")
+    timeout: Optional[int] = Field(30, description="Timeout in seconds")
+
+
+@app.post("/api/execute")
+@app.post("/execute")
+async def execute_code_endpoint(req: CodeExecuteRequest):
+    """
+    Interactive code execution in Docker sandbox.
+    Direct path from Code Editor + Stdin -> Docker Sandbox -> Response.
+    Bypasses LLM and LangGraph to reduce GPU usage, latency, and token cost.
+    """
+    from tools.sandbox import run_code_sandbox
+    result = run_code_sandbox(
+        code=req.code,
+        language=req.language or "python",
+        stdin=req.stdin or "",
+        timeout=req.timeout or 30,
+    )
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
+# Agent Run + SSE Stream
+# ─────────────────────────────────────────────────────────────
 
 @app.post("/api/run")
 async def run_agent_endpoint(
     background_tasks: BackgroundTasks,
     task: str = Form(...),
     files: str = Form("[]"),
+    user_context: str = Form("{}"),
 ):
     """
-    Start an agent run. Returns a task_id immediately.
-    Connect to /api/stream/{task_id} to receive SSE events.
+    Start an agent run via LangGraph stateful orchestration.
+    Returns a task_id immediately. Connect to /api/stream/{task_id} for SSE events.
     """
     try:
         file_paths = json.loads(files)
     except Exception:
         file_paths = []
+
+    try:
+        u_context = json.loads(user_context)
+    except Exception:
+        u_context = {}
 
     task_id = os.urandom(8).hex()
     queue: asyncio.Queue = asyncio.Queue()
@@ -127,6 +166,7 @@ async def run_agent_endpoint(
                 uploaded_files=file_paths,
                 has_image=has_image,
                 has_pdf=has_pdf,
+                user_context=u_context,
             )
             _push("complete", {
                 "final_output": state.final_output or "",
@@ -153,6 +193,7 @@ async def run_agent_endpoint(
 
 @app.get("/api/stream/{task_id}")
 async def stream_task(task_id: str):
+
     """SSE stream for real-time agent activity."""
     queue = task_queues.get(task_id)
     if queue is None:

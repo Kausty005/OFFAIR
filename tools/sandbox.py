@@ -271,3 +271,159 @@ def run_python_sandbox(
             Path(script_path).unlink(missing_ok=True)
         except Exception:
             pass
+
+
+def run_code_sandbox(
+    code: str,
+    language: str = "python",
+    stdin: str = "",
+    timeout: int = TIMEOUT,
+) -> dict:
+    """
+    Execute arbitrary untrusted code in an ephemeral, isolated Docker container with stdin support.
+
+    Args:
+        code: Code string to execute.
+        language: Programming language (default: python).
+        stdin: Standard input to pipe into the program (supports multiline strings).
+        timeout: Maximum execution duration in seconds.
+
+    Returns:
+        {
+            "status": "success" | "error",
+            "stdout": str,
+            "stderr": str,
+            "exit_code": int,
+            "execution_time": float,
+            "sandbox_used": bool,
+            "network_disabled": bool,
+            "error": Optional[str],
+        }
+    """
+    if language.lower() not in ("python", "py", "python3"):
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": f"Unsupported language '{language}'. Only Python is supported in this sandbox.",
+            "exit_code": 1,
+            "execution_time": 0.0,
+            "sandbox_used": False,
+            "network_disabled": False,
+            "error": f"Unsupported language '{language}'",
+        }
+
+    if not docker_available():
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": "Docker daemon is not available. Please start Docker Desktop.",
+            "exit_code": -1,
+            "execution_time": 0.0,
+            "sandbox_used": False,
+            "network_disabled": False,
+            "error": "Docker is not available",
+        }
+
+    log("SANDBOX_START", mode="interactive", network_disabled=NETWORK_DISABLED, timeout=timeout)
+
+    import uuid
+    container_name = f"sih_interactive_{uuid.uuid4().hex[:8]}"
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".py",
+        delete=False,
+        prefix="sih_interactive_",
+        encoding="utf-8",
+    ) as f:
+        f.write(code)
+        script_path = f.name
+
+    try:
+        docker_cmd = [
+            "docker", "run",
+            "-i",                            # Keep STDIN open
+            "--name", container_name,        # Unique name for explicit cleanup on timeout
+            "--rm",                          # Ephemeral
+            "--memory", MEMORY_LIMIT,        # Memory restriction (e.g. 256m)
+            "--memory-swap", MEMORY_LIMIT,   # Disable swap expansion
+            "--cpus", "1.0",                 # CPU restriction
+            "-v", f"{script_path}:/sandbox/app.py:ro",  # Read-only mount
+            "--workdir", "/sandbox",
+        ]
+
+        if NETWORK_DISABLED:
+            docker_cmd.extend(["--network", "none"])
+
+        docker_cmd.extend([DOCKER_IMAGE, "python", "-u", "/sandbox/app.py"])
+
+        t0 = time.time()
+        result = subprocess.run(
+            docker_cmd,
+            input=stdin if stdin is not None else "",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        elapsed = round(time.time() - t0, 3)
+
+        success = (result.returncode == 0)
+        stdout = result.stdout
+        stderr = result.stderr
+
+        log(
+            "SANDBOX_EXECUTION",
+            mode="interactive",
+            success=success,
+            elapsed_s=elapsed,
+            exit_code=result.returncode,
+            network_disabled=NETWORK_DISABLED,
+            sandbox_used=True,
+        )
+
+        return {
+            "status": "success" if success else "error",
+            "stdout": stdout[:10000],
+            "stderr": stderr[:5000],
+            "exit_code": result.returncode,
+            "execution_time": elapsed,
+            "sandbox_used": True,
+            "network_disabled": NETWORK_DISABLED,
+            "error": None if success else (stderr.strip() or f"Process exited with code {result.returncode}"),
+        }
+
+    except subprocess.TimeoutExpired:
+        # Force remove container if still running
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        log("SANDBOX_TIMEOUT", mode="interactive", timeout=timeout)
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": f"Execution timed out after {timeout} seconds.",
+            "exit_code": 124,
+            "execution_time": float(timeout),
+            "sandbox_used": True,
+            "network_disabled": NETWORK_DISABLED,
+            "error": f"Sandbox timeout ({timeout}s)",
+        }
+
+    except Exception as e:
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        log("SANDBOX_ERROR", mode="interactive", error=str(e))
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": str(e),
+            "exit_code": -1,
+            "execution_time": 0.0,
+            "sandbox_used": True,
+            "network_disabled": NETWORK_DISABLED,
+            "error": str(e),
+        }
+
+    finally:
+        try:
+            Path(script_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+

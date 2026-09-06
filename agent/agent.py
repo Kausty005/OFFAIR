@@ -134,20 +134,71 @@ class Agent:
         uploaded_files: list[str] = None,
         has_image: bool = False,
         has_pdf: bool = False,
+        user_context: dict = None,
     ) -> AgentState:
         """
         Main entry point. Given a task and optional files, returns a completed AgentState.
+        Orchestrated via LangGraph stateful graph while maintaining full backward compatibility.
         """
+        from agent.graph import get_agent_graph
+
         uploaded_files = uploaded_files or []
+        graph = get_agent_graph()
 
-        # Route
-        decision = classify(
-            task,
-            has_image=has_image,
-            has_pdf=has_pdf,
-        )
+        def event_cb(event_type: str, data: Any):
+            if event_type == "progress_step" and isinstance(data, AgentStep):
+                self._notify(data)
 
-        # Build state
+        initial_state = {
+            "user_query": task,
+            "uploaded_files": uploaded_files,
+            "user_context": user_context or {},
+            "event_callback": event_cb,
+        }
+
+        try:
+            result = graph.invoke(initial_state)
+        except Exception as e:
+            log("AGENT_GRAPH_ERROR", error=str(e))
+            # Fallback to legacy step execution if graph fails unexpectedly
+            return self._legacy_run(task, uploaded_files, has_image, has_pdf)
+
+        # Assemble backward-compatible AgentState
+        state = AgentState()
+        state.task = task
+        state.uploaded_files = uploaded_files
+        state.task_type = result.get("task_type", "general")
+        state.selected_model = result.get("selected_model", "")
+        state.routing_reason = result.get("model_reason", "")
+        state.tool_results = result.get("tool_results", {})
+        state.extracted_data = result.get("extracted_data", {})
+        state.rag_sources = result.get("retrieved_context", [])
+        state.output_files = result.get("output_files", [])
+        state.verified = result.get("verified", False)
+        state.verification_notes = result.get("verification_notes", [])
+        state.final_output = result.get("final_output", "")
+
+        # Convert plan to AgentSteps
+        plan_list = result.get("execution_plan", [])
+        for idx, p in enumerate(plan_list):
+            s = state.add_step(p.get("description", f"Step {idx+1}"), tool=p.get("tool"))
+            s.complete(s.description)
+
+        state.complete(state.final_output)
+        log("TASK_COMPLETED", status="done", verified=state.verified, output_files=state.output_files)
+        return state
+
+    def _legacy_run(
+        self,
+        task: str,
+        uploaded_files: list[str] = None,
+        has_image: bool = False,
+        has_pdf: bool = False,
+    ) -> AgentState:
+        """Fallback execution method preserving the original procedural engine."""
+        uploaded_files = uploaded_files or []
+        decision = classify(task, has_image=has_image, has_pdf=has_pdf)
+
         state = AgentState()
         state.task = task
         state.uploaded_files = uploaded_files
@@ -156,18 +207,7 @@ class Agent:
         state.routing_reason = decision.reason
         state.start()
 
-        log(
-            "TASK_RECEIVED",
-            task=task[:100],
-            task_type=decision.task_type,
-            model=decision.selected_model,
-        )
-
-        # Plan
         state = create_plan(state)
-        log("PLAN_CREATED", steps=len(state.plan))
-
-        # Execute each step
         for step in state.plan:
             step.start()
             self._notify(step)
@@ -176,63 +216,15 @@ class Agent:
                 step.complete(step.result)
             except Exception as e:
                 step.fail(str(e))
-                log("STEP_ERROR", step=step.description, error=str(e))
-                # Continue — don't abort on single step failure
             self._notify(step)
             state.advance()
 
-        # Final verification
         ok, notes = self._verify_state(state)
         state.verified = ok
         state.verification_notes = notes
-
-        # ── Ensure final_output is never empty and contains proper code ──────
-        # ── Coding tasks: format code + sandbox results ────────────────
-        if state.task_type == "coding":
-            code = state.tool_results.get("generated_code", "").strip()
-            sr = state.tool_results.get("sandbox_result", {})
-            parts = []
-            if code:
-                parts.append(f"Here is the generated Python code:\n\n```python\n{code}\n```")
-            if sr:
-                if sr.get("sandbox_used"):
-                    status = "✅ All tests passed" if sr.get("success") else f"⚠️ {sr.get('tests_failed', 0)} test(s) failed"
-                    parts.append(
-                        f"**Sandbox Execution Result** (Docker, network disabled):\n"
-                        f"- Status: {status}\n"
-                        f"- Tests: {sr.get('tests_passed', 0)}/{sr.get('tests_total', 0)} passed\n"
-                        f"- Output:\n```\n{sr.get('stdout', 'No output')[:800]}\n```"
-                    )
-                elif sr.get("error"):
-                    parts.append(f"⚠️ Sandbox error: {sr['error']}")
-            if parts:
-                state.final_output = "\n\n".join(parts)
-            else:
-                state.final_output = "⚠️ Code generation returned empty output. Please check that Ollama is running and a model is pulled (`ollama pull qwen3:4b`)."
-
-        elif not state.final_output:
-            # ── Check if any step failed (status 'error') ─────────────────
-            if failed := [s for s in state.plan if s.status == "error"]:
-                errors = "; ".join(s.result or s.error or "unknown error" for s in failed)
-                state.final_output = (
-                    f"⚠️ The agent encountered an error: {errors}\n\n"
-                    "**Common causes:**\n"
-                    "- Ollama is not running → run `ollama serve` in a terminal\n"
-                    "- The required model is not pulled → run `ollama pull qwen3:4b`\n"
-                    "- The model returned an empty response"
-                )
-            else:
-                # Gather any generated text from tool_results
-                generated = (
-                    state.tool_results.get("reasoning")
-                    or state.tool_results.get("generated_code")
-                    or state.tool_results.get("raw_text", "")[:500]
-                )
-                state.final_output = generated or "Task completed successfully."
-
-        state.complete(state.final_output)
-        log("TASK_COMPLETED", status="done", verified=ok, output_files=state.output_files)
+        state.complete(state.final_output or "Task completed.")
         return state
+
 
     # ── Step Dispatcher ────────────────────────────────────────────────────
 

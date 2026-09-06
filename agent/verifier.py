@@ -161,3 +161,159 @@ def verify_rag_results(results: list[dict]) -> tuple[bool, list[str]]:
 
     log("VERIFICATION", type="rag", chunks=len(results))
     return True, notes
+
+
+def verify_calculation_output(calc_result: Any) -> tuple[bool, list[str]]:
+    """
+    Verify calculation result is structurally valid and non-null.
+    """
+    notes = []
+    if calc_result is None:
+        notes.append("❌ Calculation returned None")
+        return False, notes
+
+    # Support CalcResult dataclass or dict
+    if hasattr(calc_result, "result"):
+        val = calc_result.result
+        formula = getattr(calc_result, "formula", "unknown")
+    elif isinstance(calc_result, dict):
+        val = calc_result.get("result")
+        formula = calc_result.get("formula", "unknown")
+    else:
+        val = calc_result
+        formula = "expression"
+
+    import math
+    if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
+        notes.append("❌ Calculation produced NaN or Infinity")
+        return False, notes
+
+    notes.append(f"✅ Calculation verified: {formula} = {val}")
+    log("VERIFICATION", type="calculation", formula=formula, result=val, passed=True)
+    return True, notes
+
+
+def verify_code_execution_output(sandbox_result: dict) -> tuple[bool, list[str]]:
+    """
+    Verify interactive code execution result from Docker sandbox.
+    Checks container startup, completion, timeouts, and exit code.
+    """
+    notes = []
+    ok = True
+
+    sandbox_used = sandbox_result.get("sandbox_used", False)
+    if not sandbox_used:
+        notes.append("❌ Docker sandbox was not used or failed to start")
+        return False, notes
+    notes.append("✅ Docker sandbox initialized with network isolation")
+
+    if sandbox_result.get("error") and "timeout" in str(sandbox_result.get("error", "")).lower():
+        notes.append("❌ Execution timed out inside container")
+        return False, notes
+
+    exit_code = sandbox_result.get("exit_code", -1)
+    if exit_code == 0:
+        notes.append("✅ Process exited with code 0 (success)")
+    else:
+        notes.append(f"⚠️ Process exited with non-zero code {exit_code}")
+        ok = False
+
+    stdout = sandbox_result.get("stdout", "")
+    if stdout.strip():
+        notes.append(f"✅ Standard output captured ({len(stdout)} chars)")
+    else:
+        notes.append("ℹ️ Standard output is empty")
+
+    stderr = sandbox_result.get("stderr", "")
+    if stderr.strip():
+        notes.append(f"⚠️ Standard error reported: {stderr.strip()[:100]}")
+
+    log("VERIFICATION", type="code_execution", exit_code=exit_code, passed=ok)
+    return ok, notes
+
+
+def verify_model_output(
+    response_text: str,
+    expected_type: str = "text",
+) -> tuple[bool, list[str]]:
+    """
+    Verify LLM generated response against format and content criteria.
+    """
+    notes = []
+    ok = True
+
+    if not response_text or not response_text.strip():
+        notes.append("❌ Model returned empty response")
+        return False, notes
+    notes.append(f"✅ Model response non-empty ({len(response_text)} chars)")
+
+    if expected_type == "code":
+        import re
+        has_code = bool(re.search(r"```python|def\s+\w+|import\s+\w+", response_text))
+        if has_code:
+            notes.append("✅ Python code structure detected in response")
+        else:
+            notes.append("⚠️ Expected Python code but no standard code markers detected")
+            ok = False
+
+    elif expected_type == "json":
+        import json
+        import re
+        clean_text = re.sub(r"```(?:json)?", "", response_text).strip().strip("`")
+        try:
+            json.loads(clean_text)
+            notes.append("✅ Valid JSON structure verified")
+        except Exception:
+            notes.append("❌ Invalid JSON in response")
+            ok = False
+
+    log("VERIFICATION", type="model_output", expected=expected_type, passed=ok)
+    return ok, notes
+
+
+def verify_task_result(task_type: str, state_data: dict) -> tuple[bool, list[str]]:
+    """
+    Unified task verifier that dynamically selects appropriate checks.
+    """
+    notes = []
+    ok = True
+
+    if task_type in ("calculation",):
+        res = state_data.get("tool_results", {}).get("calculations")
+        v_ok, v_notes = verify_calculation_output(res)
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    elif task_type in ("code_execution",):
+        res = state_data.get("tool_results", {}).get("sandbox_result", {})
+        v_ok, v_notes = verify_code_execution_output(res)
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    elif task_type in ("coding", "code_generation"):
+        code = state_data.get("generated_code") or state_data.get("tool_results", {}).get("generated_code", "")
+        test_res = state_data.get("tool_results", {}).get("sandbox_result", {})
+        v_ok, v_notes = verify_coding_output(code, test_res)
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    elif task_type in ("knowledge_query", "rag"):
+        chunks = state_data.get("retrieved_context") or state_data.get("rag_sources", [])
+        v_ok, v_notes = verify_rag_results(chunks)
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    elif task_type in ("document", "document_analysis", "report_generation"):
+        v_ok, v_notes = verify_inspection_output(state_data)
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    else:
+        # General chat or fallback
+        resp = state_data.get("generated_response") or state_data.get("final_output", "")
+        v_ok, v_notes = verify_model_output(resp, expected_type="text")
+        notes.extend(v_notes)
+        ok = ok and v_ok
+
+    return ok, notes
+

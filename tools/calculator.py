@@ -162,43 +162,112 @@ def bearing_temperature_risk(temperature_celsius: float) -> CalcResult:
     )
 
 
+import ast
+import operator
+
+_SAFE_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+_SAFE_FUNCS = {
+    "sqrt": math.sqrt,
+    "log": math.log,
+    "log10": math.log10,
+    "log2": math.log2,
+    "exp": math.exp,
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "abs": abs,
+    "round": round,
+    "min": min,
+    "max": max,
+    "pow": pow,
+    "floor": math.floor,
+    "ceil": math.ceil,
+}
+
+_SAFE_CONSTANTS = {
+    "pi": math.pi,
+    "e": math.e,
+}
+
+
+def _eval_ast_node(node: ast.AST, variables: dict) -> float:
+    """Recursively evaluate an AST expression safely without eval()."""
+    if isinstance(node, ast.Expression):
+        return _eval_ast_node(node.body, variables)
+
+    elif isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        raise ValueError(f"Disallowed constant value: {node.value}")
+
+    elif isinstance(node, ast.Name):
+        if node.id in variables:
+            return float(variables[node.id])
+        elif node.id in _SAFE_CONSTANTS:
+            return _SAFE_CONSTANTS[node.id]
+        raise ValueError(f"Undefined variable or constant: '{node.id}'")
+
+    elif isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type in _SAFE_OPS:
+            operand = _eval_ast_node(node.operand, variables)
+            return float(_SAFE_OPS[op_type](operand))
+        raise ValueError(f"Unsupported unary operator: {op_type.__name__}")
+
+    elif isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type in _SAFE_OPS:
+            left = _eval_ast_node(node.left, variables)
+            right = _eval_ast_node(node.right, variables)
+            return float(_SAFE_OPS[op_type](left, right))
+        raise ValueError(f"Unsupported binary operator: {op_type.__name__}")
+
+    elif isinstance(node, ast.Call):
+        func = node.func
+        func_name = ""
+        if isinstance(func, ast.Name):
+            func_name = func.id
+        elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            if func.value.id == "math":
+                func_name = func.attr
+        if func_name in _SAFE_FUNCS:
+            args = [_eval_ast_node(arg, variables) for arg in node.args]
+            return float(_SAFE_FUNCS[func_name](*args))
+        raise ValueError(f"Disallowed or unsupported function call: '{ast.dump(func)}'")
+
+    raise ValueError(f"Disallowed AST expression element: {type(node).__name__}")
+
+
 def evaluate_expression(expr: str, variables: dict = None) -> CalcResult:
     """
-    Safely evaluate a simple mathematical expression.
-    Only allows basic math operators and functions — no code execution.
+    Safely evaluate a mathematical expression using AST-based parsing.
+    NO Python eval() is used. Only whitelisted math operations and functions are allowed.
     """
-    # Whitelist of allowed names
-    safe_globals = {
-        "__builtins__": {},
-        "math": math,
-        "sqrt": math.sqrt,
-        "log": math.log,
-        "exp": math.exp,
-        "pi": math.pi,
-        "e": math.e,
-        "abs": abs,
-        "round": round,
-        "min": min,
-        "max": max,
-        "pow": pow,
-    }
-    if variables:
-        safe_globals.update(variables)
-
-    # Security check — only allow safe characters
-    import re
-    if re.search(r'[^0-9\.\+\-\*\/\(\)\s\^a-zA-Z_,]', expr):
-        raise ValueError(f"Expression contains disallowed characters: {expr}")
+    cleaned = expr.strip().replace("^", "**")
+    vars_dict = dict(variables or {})
 
     try:
-        result = eval(expr.replace("^", "**"), safe_globals, {})
+        parsed_ast = ast.parse(cleaned, mode="eval")
+        result = _eval_ast_node(parsed_ast, vars_dict)
         log("CALCULATION", expr=expr, result=result)
         return CalcResult(
             formula=expr,
             inputs=variables or {},
-            result=float(result),
+            result=round(result, 6),
             unit="",
             explanation=f"{expr} = {result}",
         )
     except Exception as e:
-        raise ValueError(f"Could not evaluate expression: {e}")
+        raise ValueError(f"Could not evaluate expression '{expr}': {e}")
+
