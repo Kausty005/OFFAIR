@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, Factory, Code2, Eye, BookOpen, Shield, Plus } from "lucide-react";
+import { Brain, Factory, Code2, Eye, BookOpen, Shield, Plus, FileStack } from "lucide-react";
 
 interface NavItem {
   id: string;
@@ -13,7 +13,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "workbench",  label: "AI Workbench",      icon: <Brain size={14} />,   group: "WORKSPACE" },
   { id: "inspection", label: "Inspection Agent",   icon: <Factory size={14} />, group: "WORKSPACE" },
   { id: "coding",     label: "Coding Agent",       icon: <Code2 size={14} />,   group: "WORKSPACE" },
-  { id: "vision",     label: "Vision Analysis",    icon: <Eye size={14} />,     group: "WORKSPACE" },
+  { id: "vision",         label: "Vision Analysis",  icon: <Eye size={14} />,       group: "WORKSPACE" },
+  { id: "document-tools", label: "Document Tools",    icon: <FileStack size={14} />, group: "WORKSPACE" },
   { id: "knowledge",  label: "Knowledge Base",     icon: <BookOpen size={14} />,group: "DATA" },
   { id: "security",   label: "Security & Audit",   icon: <Shield size={14} />,  group: "DATA" },
 ];

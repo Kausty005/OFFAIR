@@ -13,6 +13,8 @@ pydantic
 
 # Document processing
 pypdf2==3.0.1
+pypdf>=4.0.0
+pymupdf>=1.24.0
 pillow>=10.0.0
 pytesseract
 

@@ -36,6 +36,7 @@ from tools.pptx_generator import (
     create_presentation_from_markdown,
     pptx_available,
 )
+from document_tools import document_tools_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +49,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# ── Document Tools (no AI/Ollama/Docker dependency) ─────────────────────────
+app.include_router(document_tools_router)
 
 # Task queue registry: task_id -> asyncio.Queue
 task_queues: dict[str, asyncio.Queue] = {}
