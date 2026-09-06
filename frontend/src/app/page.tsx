@@ -11,6 +11,7 @@ import CodingView from "@/components/views/CodingView";
 import VisionView from "@/components/views/VisionView";
 import KnowledgeView from "@/components/views/KnowledgeView";
 import SecurityView from "@/components/views/SecurityView";
+import DocumentToolsView from "@/components/views/DocumentToolsView";
 import { AgentStep, ModelRouterInfo, SystemStatus } from "@/types";
 
 export default function Home() {
@@ -99,6 +100,8 @@ export default function Home() {
         return <KnowledgeView />;
       case "security":
         return <SecurityView systemStatus={systemStatus} />;
+      case "document-tools":
+        return <DocumentToolsView />;
       default:
         return <WorkbenchView callbacks={agentCallbacks} />;
     }

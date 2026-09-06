@@ -29,6 +29,7 @@ from models.model_registry import get_all_models, get_available_model
 import models.ollama_client as ollama_client
 from security.audit import log, get_recent_logs
 from tools.files import get_output_path
+from document_tools import document_tools_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,7 +42,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# ── Document Tools (no AI/Ollama/Docker dependency) ─────────────────────────
+app.include_router(document_tools_router)
 
 # Task queue registry: task_id -> asyncio.Queue
 task_queues: dict[str, asyncio.Queue] = {}
