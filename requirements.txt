@@ -1,0 +1,32 @@
+# requirements.txt — SIH26117 Sovereign AI Workbench Backend
+# All inference is local. No cloud APIs.
+
+# Web framework
+fastapi==0.110.0
+uvicorn[standard]
+python-multipart
+sse-starlette
+
+# Data & configuration
+pyyaml
+pydantic
+
+# Document processing
+pypdf2==3.0.1
+pillow>=10.0.0
+pytesseract
+
+# Output generation
+python-docx
+openpyxl
+python-pptx
+
+# RAG
+chromadb==0.5.23
+sentence-transformers
+
+# HTTP
+requests
+
+# Utilities
+pytest

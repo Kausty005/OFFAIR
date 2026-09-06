@@ -1,0 +1,54 @@
+# config/models.yaml — Model Configuration for SIH26117
+# Change model names here to switch models without code changes.
+# All models must be available in local Ollama instance.
+# RTX 4050 6GB VRAM — use small quantized models.
+
+models:
+
+  general:
+    provider: ollama
+    name: qwen3:4b
+    description: "General reasoning and document understanding (Qwen3 4B)"
+    context_length: 8192
+    vram_mb: 3000
+    task_types:
+      - general
+      - document
+      - reasoning
+      - calculation
+      - extraction
+
+  coding:
+    provider: ollama
+    name: qwen2.5-coder:3b
+    description: "Specialized code generation and debugging (Qwen2.5-Coder 3B)"
+    fallback: qwen3:4b
+    context_length: 8192
+    vram_mb: 2000
+    task_types:
+      - coding
+      - debugging
+      - code_review
+
+  vision:
+    provider: ollama
+    name: llava-phi3:latest
+    description: "Multimodal vision model for images and scanned documents"
+    fallback: qwen3:4b
+    context_length: 4096
+    vram_mb: 3500
+    task_types:
+      - vision
+      - image
+      - scanned_document
+      - diagram
+      - handwritten
+
+  embedding:
+    provider: ollama
+    name: nomic-embed-text:latest
+    description: "Local text embeddings for RAG vector store"
+    dimensions: 768
+    vram_mb: 500
+    task_types:
+      - embedding
