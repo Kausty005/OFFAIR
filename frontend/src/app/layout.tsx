@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Sidebar } from "@/components/layout/sidebar";
+import { Topbar } from "@/components/layout/topbar";
 
 export const metadata: Metadata = {
-  title: "OffAir AI — On-Premise & Air-Gap Ready",
-  description: "On-Premise Agentic AI Workbench using Open-Weight Multimodal LLMs for Confidential Industrial Work",
+  title: "OFFAIR AI",
+  description: "Sovereign On-Premise Agentic AI Workbench",
 };
 
 export default function RootLayout({
@@ -12,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -21,7 +23,15 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ height: "100vh", overflow: "hidden" }}>{children}</body>
+      <body className="bg-blueprint text-white antialiased h-screen overflow-hidden flex font-sans">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto p-6 relative">
+            {children}
+          </main>
+        </div>
+      </body>
     </html>
   );
 }
