@@ -87,15 +87,11 @@ _KNOWLEDGE_PATTERNS = [
     r"\bsearch\s+(?:the\s+)?(?:knowledge\s+base|kb|docs)\b",
     r"\bstandard\s+operating\s+procedure\b",
     r"\bsafety\s+protocol\b",
-    r"\bsop\b",
-    r"\bsafety\s+manual\b",
     r"\bknowledge\s+base\b",
     r"\bprocedure\s+for\b",
-    r"\bthresholds?\b",
     r"\boperating\s+limits?\b",
     r"\bguidelines?\b",
     r"\bspecifications?\b",
-    r"\bparameters?\b",
     r"\bwhat\s+are\b",
     r"\bwhat\s+is\b",
     r"\bhow\s+do\b",
@@ -104,9 +100,6 @@ _KNOWLEDGE_PATTERNS = [
     r"\bexplain\b",
     r"\bdescribe\b",
     r"\bdetails?\s+of\b",
-    r"\bbearing\b",
-    r"\bvibration\b",
-    r"\btemperature\b",
 ]
 
 _VISION_PATTERNS = [
@@ -344,7 +337,64 @@ def classify_task(
             selected_tools=tools,
         )
 
-    # 6. Knowledge Query (RAG)
+    # 6. Report Generation (Word DOCX) - High priority when explicitly requested
+    if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
+        model = get_available_model("general") or "llama3.1:8b"
+        steps = [
+            PlannedStep(1, TaskType.REPORT_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.REPORT_GENERATION, "Generate formatted Word document (.docx)", "docx_generator"),
+            PlannedStep(3, TaskType.REPORT_GENERATION, "Verify generated document on filesystem", "verifier"),
+        ]
+        return ClassificationResult(
+            primary_task=TaskType.REPORT_GENERATION,
+            is_multi_step=False,
+            steps=steps,
+            selected_model=model,
+            selected_role="general",
+            reason="Formal document generation request routed to DOCX generator.",
+            confidence=0.95,
+            selected_tools=["llm", "docx_generator", "verifier"],
+        )
+
+    # 6.5. Presentation Generation
+    if any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS):
+        model = get_available_model("general") or "llama3.1:8b"
+        steps = [
+            PlannedStep(1, TaskType.PRESENTATION_GENERATION, "Synthesize presentation slides using local model", "llm"),
+            PlannedStep(2, TaskType.PRESENTATION_GENERATION, "Generate formatted PowerPoint presentation (.pptx)", "pptx_generator"),
+            PlannedStep(3, TaskType.PRESENTATION_GENERATION, "Verify generated presentation file", "verifier"),
+        ]
+        return ClassificationResult(
+            primary_task=TaskType.PRESENTATION_GENERATION,
+            is_multi_step=False,
+            steps=steps,
+            selected_model=model,
+            selected_role="general",
+            reason="Presentation generation request routed to PPTX generator.",
+            confidence=0.92,
+            selected_tools=["llm", "pptx_generator", "verifier"],
+        )
+
+    # 6.6. PDF Report Generation
+    if any(re.search(p, q_lower) for p in _PDF_PATTERNS):
+        model = get_available_model("general") or "llama3.1:8b"
+        steps = [
+            PlannedStep(1, TaskType.PDF_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.PDF_GENERATION, "Generate formatted PDF report (.pdf)", "pdf_generator"),
+            PlannedStep(3, TaskType.PDF_GENERATION, "Verify generated PDF report on filesystem", "verifier"),
+        ]
+        return ClassificationResult(
+            primary_task=TaskType.PDF_GENERATION,
+            is_multi_step=False,
+            steps=steps,
+            selected_model=model,
+            selected_role="general",
+            reason="PDF document generation request routed to PDF generator.",
+            confidence=0.92,
+            selected_tools=["llm", "pdf_generator", "verifier"],
+        )
+
+    # 7. Knowledge Query (RAG)
     if any(re.search(p, q_lower) for p in _KNOWLEDGE_PATTERNS):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
@@ -363,25 +413,23 @@ def classify_task(
             selected_tools=["rag", "llm", "verifier"],
         )
 
-    # 7. Document Analysis (Explicit document analysis / inspection)
-    has_explicit_analysis = any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS)
-    if has_explicit_analysis or (has_pdf and any(k in q_lower for k in ("analyze", "analysis", "extract", "parse", "ocr", "summarize"))):
+    # 7. Report Generation (Word DOCX) - High priority when explicitly requested
+    if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
-            PlannedStep(1, TaskType.DOCUMENT_ANALYSIS, "Process document and perform local OCR if scanned", "pdf_processor"),
-            PlannedStep(2, TaskType.DOCUMENT_ANALYSIS, "Extract structured findings and measurements", "llm_extraction"),
-            PlannedStep(3, TaskType.DOCUMENT_ANALYSIS, "Search SOP knowledge base for compliance criteria", "rag"),
-            PlannedStep(4, TaskType.DOCUMENT_ANALYSIS, "Verify document integrity", "verifier"),
+            PlannedStep(1, TaskType.REPORT_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.REPORT_GENERATION, "Generate formatted Word document (.docx)", "docx_generator"),
+            PlannedStep(3, TaskType.REPORT_GENERATION, "Verify generated document on filesystem", "verifier"),
         ]
         return ClassificationResult(
-            primary_task=TaskType.DOCUMENT_ANALYSIS,
+            primary_task=TaskType.REPORT_GENERATION,
             is_multi_step=False,
             steps=steps,
             selected_model=model,
             selected_role="general",
-            reason="Document analysis task routed to document extraction and OCR pipeline.",
-            confidence=0.90,
-            selected_tools=["pdf_processor", "llm_extraction", "rag", "verifier"],
+            reason="Formal document generation request routed to DOCX generator.",
+            confidence=0.95,
+            selected_tools=["llm", "docx_generator", "verifier"],
         )
 
     # 7.5. Presentation Generation
@@ -422,23 +470,25 @@ def classify_task(
             selected_tools=["llm", "pdf_generator", "verifier"],
         )
 
-    # 8. Report Generation (Word DOCX)
-    if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
+    # 8. Document Analysis (Explicit document analysis / inspection)
+    has_explicit_analysis = any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS)
+    if has_explicit_analysis or (has_pdf and any(k in q_lower for k in ("analyze", "analysis", "extract", "parse", "ocr", "summarize"))):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
-            PlannedStep(1, TaskType.REPORT_GENERATION, "Synthesize report sections using local model", "llm"),
-            PlannedStep(2, TaskType.REPORT_GENERATION, "Generate formatted Word document (.docx)", "docx_generator"),
-            PlannedStep(3, TaskType.REPORT_GENERATION, "Verify generated document on filesystem", "verifier"),
+            PlannedStep(1, TaskType.DOCUMENT_ANALYSIS, "Process document and perform local OCR if scanned", "pdf_processor"),
+            PlannedStep(2, TaskType.DOCUMENT_ANALYSIS, "Extract structured findings and measurements", "llm_extraction"),
+            PlannedStep(3, TaskType.DOCUMENT_ANALYSIS, "Search SOP knowledge base for compliance criteria", "rag"),
+            PlannedStep(4, TaskType.DOCUMENT_ANALYSIS, "Verify document integrity", "verifier"),
         ]
         return ClassificationResult(
-            primary_task=TaskType.REPORT_GENERATION,
+            primary_task=TaskType.DOCUMENT_ANALYSIS,
             is_multi_step=False,
             steps=steps,
             selected_model=model,
             selected_role="general",
-            reason="Formal document generation request routed to DOCX generator.",
-            confidence=0.89,
-            selected_tools=["llm", "docx_generator", "verifier"],
+            reason="Document analysis task routed to document extraction and OCR pipeline.",
+            confidence=0.90,
+            selected_tools=["pdf_processor", "llm_extraction", "rag", "verifier"],
         )
 
     # 9. Fallback: General Chat / Reasoning
