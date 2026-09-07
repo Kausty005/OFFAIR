@@ -42,14 +42,19 @@ if ($frontend) {
     Write-Host "      [ERR] Frontend failed to start" -ForegroundColor Red
 }
 
+# Detect local LAN IPv4 address
+$localIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "*Wi-Fi*" -or $_.InterfaceAlias -like "*Ethernet*" } | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+if (!$localIp) { $localIp = "127.0.0.1" }
+
 Write-Host ""
 Write-Host "-----------------------------------------------------" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  UI:      http://localhost:5000" -ForegroundColor Cyan
-Write-Host "  API:     http://localhost:8000" -ForegroundColor Blue
-Write-Host "  Docs:    http://localhost:8000/docs" -ForegroundColor Blue
+Write-Host "  Local UI:        http://localhost:5000" -ForegroundColor Cyan
+Write-Host "  Network UI:      http://$($localIp):5000" -ForegroundColor Cyan
+Write-Host "  Network API:     http://$($localIp):8000" -ForegroundColor Blue
+Write-Host "  API Docs:        http://$($localIp):8000/docs" -ForegroundColor Blue
 Write-Host ""
-Write-Host "  All inference: LOCAL (Ollama @ localhost:11434)" -ForegroundColor Green
+Write-Host "  All inference:   LOCAL (Ollama @ localhost:11434)" -ForegroundColor Green
 Write-Host "  External API calls: 0" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop" -ForegroundColor Gray
