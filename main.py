@@ -240,7 +240,8 @@ async def get_status():
 
 @app.get("/api/security")
 async def get_security():
-    """Security dashboard data."""
+    """Security dashboard data — basic flags."""
+    ollama_up = ollama_client.ping()
     return {
         "local_model_inference": True,
         "local_ocr": True,
@@ -251,16 +252,69 @@ async def get_security():
         "internet_dependency": "NONE AFTER SETUP",
         "ollama_endpoint": "http://localhost:11434",
         "all_local": True,
+        "ollama_online": ollama_up,
+    }
+
+
+@app.get("/api/security/stats")
+async def get_security_stats():
+    """Rich security stats with live counters from audit system."""
+    from security.audit import get_security_status
+    stats = get_security_status()
+
+    # Pull live Ollama models
+    models_available = []
+    ollama_up = False
+    try:
+        models_available = [m.get("name", "") for m in ollama_client.list_models()]
+        ollama_up = True
+    except Exception:
+        pass
+
+    # Docker status
+    import subprocess
+    docker_up = False
+    try:
+        r = subprocess.run(["docker", "info"], capture_output=True, timeout=5)
+        docker_up = r.returncode == 0
+    except Exception:
+        pass
+
+    return {
+        **stats,
+        "ollama_online": ollama_up,
+        "docker_online": docker_up,
+        "models_loaded": models_available,
+        "primary_model": models_available[0] if models_available else "N/A",
     }
 
 
 @app.get("/api/logs")
-async def get_logs(limit: int = 30):
+async def get_logs(limit: int = 50):
     """Get recent audit log entries."""
     try:
         return get_recent_logs(limit=limit)
-    except Exception as e:
+    except Exception:
         return []
+
+
+@app.get("/api/files")
+async def list_output_files():
+    """List generated output files from workspace/outputs/."""
+    files = []
+    try:
+        for p in sorted(OUTPUT_DIR.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True):
+            if p.is_file():
+                files.append({
+                    "name": p.name,
+                    "size": p.stat().st_size,
+                    "modified": p.stat().st_mtime,
+                    "ext": p.suffix.lower().replace(".", ""),
+                    "download_url": f"/api/download/{p.name}",
+                })
+    except Exception:
+        pass
+    return {"files": files, "count": len(files)}
 
 
 # ─────────────────────────────────────────────────────────────
