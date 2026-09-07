@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { KeyRound, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 
-const API = "http://localhost:8000";
+const API = "";
 const ROLES = ["HR", "employee", "finance", "engineer", "admin"];
 
 export interface SessionUser {
