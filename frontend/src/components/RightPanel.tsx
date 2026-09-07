@@ -185,11 +185,13 @@ function StepRow({ step }: { step: AgentStep }) {
 
 function RouterDisplay({ info }: { info: ModelRouterInfo }) {
   const taskColors: Record<string, string> = {
-    vision:      "var(--accent-blue)",
-    coding:      "var(--accent-orange)",
-    document:    "var(--accent-green)",
-    general:     "var(--accent-green)",
-    calculation: "var(--accent-purple)",
+    vision:             "var(--accent-blue)",
+    coding:             "var(--accent-orange)",
+    document:           "var(--accent-green)",
+    document_operation: "var(--accent-green)",
+    ocr:                "var(--accent-blue)",
+    general:            "var(--accent-green)",
+    calculation:        "var(--accent-purple)",
   };
   const color = taskColors[info.taskType] || "var(--accent-orange)";
 

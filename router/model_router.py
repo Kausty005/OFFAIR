@@ -95,14 +95,37 @@ def classify(
     Returns:
         RoutingDecision with task_type, model, and reasoning.
     """
-    # --- Hard rules for file uploads ---
+    from document_tools.chat_resolver import resolve_explicit_document_operation, is_explicit_vision_request
+
+    mock_files = []
     if has_image:
+        mock_files.append("image.png")
+    if has_pdf:
+        mock_files.append("document.pdf")
+    if has_docx:
+        mock_files.append("document.docx")
+
+    # 1. Deterministic document operations (Highest Priority)
+    doc_op = resolve_explicit_document_operation(text, uploaded_files=mock_files)
+    if doc_op:
+        return RoutingDecision(
+            task_type="document_operation",
+            selected_role="document_tools",
+            selected_model="NONE",
+            reason=f"Deterministic document operation routed to {doc_op.tool_name} tool.",
+            confidence=1.0,
+            inference="LOCAL",
+            external_api="NONE",
+        )
+
+    # 2. Explicit Vision Analysis
+    if is_explicit_vision_request(text):
         model_name = get_available_model("vision") or "llava-phi3:latest"
         return RoutingDecision(
             task_type="vision",
             selected_role="vision",
             selected_model=model_name,
-            reason="Image uploaded — routed to vision model for multimodal understanding.",
+            reason="Visual analysis task requested — routed to vision model.",
             confidence=0.95,
         )
 
@@ -111,6 +134,10 @@ def classify(
     vision_score = _score_keywords(text, _VISION_KEYWORDS)
     calc_score = _score_keywords(text, _CALCULATION_KEYWORDS)
     doc_score = _score_keywords(text, _DOCUMENT_KEYWORDS)
+
+    # Boost vision only if image attached AND vision keywords present
+    if has_image and vision_score > 0:
+        vision_score += 5
 
     # PDF upload boosts document score
     if has_pdf or has_docx:
@@ -173,6 +200,7 @@ def get_routing_display(decision: RoutingDecision) -> dict:
         "vision": "🖼️",
         "calculation": "🔢",
         "document": "📄",
+        "document_operation": "📄",
         "general": "🧠",
     }
     return {

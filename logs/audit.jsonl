@@ -1052,6 +1052,7 @@
 {"time": "2026-09-06T11:41:06.235638+00:00", "timestamp": "2026-09-06T11:41:06.235638+00:00", "action": "EMBEDDING", "event": "EMBEDDING", "details": {"model": "nomic-embed-text:latest", "text_len": 24, "dims": 768}, "model": "nomic-embed-text:latest", "text_len": 24, "dims": 768}
 {"time": "2026-09-06T11:41:06.236655+00:00", "timestamp": "2026-09-06T11:41:06.236655+00:00", "action": "RAG_SEARCH", "event": "RAG_SEARCH", "details": {"results": 1, "collection": "sih26117_knowledge"}, "results": 1, "collection": "sih26117_knowledge"}
 {"time": "2026-09-06T11:41:06.237526+00:00", "timestamp": "2026-09-06T11:41:06.237526+00:00", "action": "VECTOR_STORE_RESET", "event": "VECTOR_STORE_RESET", "details": {"collection": "sih26117_knowledge"}, "collection": "sih26117_knowledge"}
+<<<<<<< HEAD
 {"time": "2026-09-07T09:10:30.317489+00:00", "timestamp": "2026-09-07T09:10:30.317489+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
 {"time": "2026-09-07T09:12:47.444975+00:00", "timestamp": "2026-09-07T09:12:47.444975+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
 {"time": "2026-09-07T09:17:24.426063+00:00", "timestamp": "2026-09-07T09:17:24.426063+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
@@ -1339,3 +1340,7 @@
 {"time": "2026-09-07T09:43:51.131862+00:00", "timestamp": "2026-09-07T09:43:51.131862+00:00", "action": "TASK_COMPLETED", "event": "TASK_COMPLETED", "details": {"status": "done", "verified": true, "output_files": []}, "status": "done", "verified": true, "output_files": []}
 {"time": "2026-09-07T09:52:50.303310+00:00", "timestamp": "2026-09-07T09:52:50.303310+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
 {"time": "2026-09-07T09:52:50.305308+00:00", "timestamp": "2026-09-07T09:52:50.305308+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
+=======
+{"time": "2026-09-07T09:45:46.470262+00:00", "timestamp": "2026-09-07T09:45:46.470262+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
+{"time": "2026-09-07T09:45:46.470262+00:00", "timestamp": "2026-09-07T09:45:46.470262+00:00", "action": "APP_START", "event": "APP_START", "details": {"version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}, "version": "2.0.0", "project": "SIH26117", "ui": "React+FastAPI"}
+>>>>>>> celestial
