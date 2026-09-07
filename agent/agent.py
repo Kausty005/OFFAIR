@@ -11,11 +11,7 @@ import sys
 import json
 import time
 from pathlib import Path
-<<<<<<< HEAD
-from typing import Optional, Callable, Generator, Any
-=======
 from typing import Any, Optional, Callable, Generator
->>>>>>> celestial
 
 _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)

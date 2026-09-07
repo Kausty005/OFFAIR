@@ -217,7 +217,7 @@ export default function InspectionView({ callbacks }: Props) {
                   </div>
                 </div>
                 <a
-                  href={`http://localhost:8000/api/download/${encodeURIComponent(
+                  href={`/api/download/${encodeURIComponent(
                     result.output_files[0].split(/[/\\]/).pop() || ""
                   )}`}
                   download

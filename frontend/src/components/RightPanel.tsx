@@ -94,7 +94,7 @@ export default function RightPanel({ agentSteps, routerInfo, isRunning, outputFi
                 return (
                   <a
                     key={i}
-                    href={`http://localhost:8000/api/download/${encodeURIComponent(name)}`}
+                    href={`/api/download/${encodeURIComponent(name)}`}
                     download={name}
                     style={{
                       display: "flex", alignItems: "center", gap: 8,

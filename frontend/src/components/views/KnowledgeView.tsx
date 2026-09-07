@@ -45,7 +45,7 @@ export default function KnowledgeView() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("http://localhost:8000/api/knowledge");
+      const r = await fetch("/api/knowledge");
       if (r.ok) {
         const data = await r.json();
         setDocs(data.documents || []);
@@ -69,7 +69,7 @@ export default function KnowledgeView() {
       const form = new FormData();
       form.append("file", f);
       form.append("auto_ingest", "true");
-      await fetch("http://localhost:8000/api/knowledge/upload", { method: "POST", body: form });
+      await fetch("/api/knowledge/upload", { method: "POST", body: form });
     }
     setUploading(false);
     load();
@@ -79,7 +79,7 @@ export default function KnowledgeView() {
   const handleIngestAll = async () => {
     setIngesting(true);
     try {
-      await fetch("http://localhost:8000/api/knowledge/ingest", { method: "POST" });
+      await fetch("/api/knowledge/ingest", { method: "POST" });
       setTimeout(() => {
         load();
         setIngesting(false);
@@ -97,7 +97,7 @@ export default function KnowledgeView() {
 
     try {
       if (activeTab === "search") {
-        const res = await fetch("http://localhost:8000/api/knowledge/search", {
+        const res = await fetch("/api/knowledge/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, top_k: 4 }),
@@ -107,7 +107,7 @@ export default function KnowledgeView() {
           setSearchResults(data.results || []);
         }
       } else {
-        const res = await fetch("http://localhost:8000/api/knowledge/ask", {
+        const res = await fetch("/api/knowledge/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, top_k: 4 }),

@@ -39,7 +39,7 @@ import {
   Check,
 } from "lucide-react";
 
-const API = "http://localhost:8000/api/document-tools";
+const API = "/api/document-tools";
 
 // ─── shared types ────────────────────────────────────────────────────────────
 

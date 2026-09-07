@@ -5,7 +5,7 @@
 import { useState, useRef, useCallback } from "react";
 import { AgentStep, AgentCallbacks } from "@/types";
 
-const API = "http://localhost:8000";
+const API = "";
 
 export function useAgent(callbacks?: Partial<AgentCallbacks>) {
   const [isRunning, setIsRunning] = useState(false);
@@ -104,7 +104,7 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
   for (const file of files) {
     const form = new FormData();
     form.append("file", file);
-    const r = await fetch("http://localhost:8000/api/upload", { method: "POST", body: form });
+    const r = await fetch("/api/upload", { method: "POST", body: form });
     if (r.ok) {
       const data = await r.json();
       paths.push(data.path);

@@ -22,8 +22,8 @@ export default function SecurityView({ systemStatus }: Props) {
     const fetchAll = async () => {
       try {
         const [logResp, secResp] = await Promise.all([
-          fetch("http://localhost:8000/api/logs"),
-          fetch("http://localhost:8000/api/security"),
+          fetch("/api/logs"),
+          fetch("/api/security"),
         ]);
         if (logResp.ok) setLogs(await logResp.json());
         if (secResp.ok) setSecurity(await secResp.json());

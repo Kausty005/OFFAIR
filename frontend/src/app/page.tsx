@@ -28,7 +28,7 @@ export default function Home() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const r = await fetch("http://localhost:8000/api/status");
+        const r = await fetch("/api/status");
         if (r.ok) setSystemStatus(await r.json());
       } catch {}
     };

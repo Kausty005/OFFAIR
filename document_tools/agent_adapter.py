@@ -750,7 +750,7 @@ def execute_document_tool(
                 )
 
             data = target.read_bytes()
-            result_bytes = delete_pages(data, pages=pages)
+            result_bytes = delete_pages(data, page_spec=pages)
             out_name = f"deleted_p{re.sub(r'[^0-9]', '_', pages)}_{target.stem}.pdf"
             out_path = save_output_bytes(result_bytes, out_name)
 
