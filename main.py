@@ -311,7 +311,6 @@ async def run_agent_endpoint(
 
 @app.get("/api/stream/{task_id}")
 async def stream_task(task_id: str):
-
     """SSE stream for real-time agent activity."""
     queue = task_queues.get(task_id)
     if queue is None:
@@ -321,7 +320,7 @@ async def stream_task(task_id: str):
         try:
             while True:
                 try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=120)
+                    msg = await asyncio.wait_for(queue.get(), timeout=5)
                 except asyncio.TimeoutError:
                     yield {"data": json.dumps({"type": "heartbeat"})}
                     continue
@@ -331,7 +330,14 @@ async def stream_task(task_id: str):
         finally:
             task_queues.pop(task_id, None)
 
-    return EventSourceResponse(generator())
+    return EventSourceResponse(
+        generator(),
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────

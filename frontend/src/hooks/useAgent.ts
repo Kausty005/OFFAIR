@@ -55,40 +55,60 @@ export function useAgent(callbacks?: Partial<AgentCallbacks>) {
       }
       const { task_id } = await resp.json();
 
-      // 2. Open SSE stream
-      const es = new EventSource(`${API}/api/stream/${task_id}`);
-      esRef.current = es;
+      // 2. Open SSE stream with reconnect resiliency
+      let retryCount = 0;
+      const maxRetries = 5;
 
-      es.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === "heartbeat") return;
+      const connectStream = () => {
+        const es = new EventSource(`${API}/api/stream/${task_id}`);
+        esRef.current = es;
 
-          if (msg.type === "progress") {
-            addOrUpdateStep(msg.data as AgentStep);
-          } else if (msg.type === "complete") {
-            setResult(msg.data);
-            setIsRunning(false);
-            callbacks?.onComplete?.(msg.data);
-            es.close();
-          } else if (msg.type === "error") {
-            setError(msg.data.error);
-            setIsRunning(false);
-            callbacks?.onError?.(msg.data.error);
-            es.close();
+        es.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === "heartbeat") {
+              retryCount = 0;
+              return;
+            }
+
+            retryCount = 0;
+            if (msg.type === "progress") {
+              addOrUpdateStep(msg.data as AgentStep);
+            } else if (msg.type === "complete") {
+              setResult(msg.data);
+              setIsRunning(false);
+              callbacks?.onComplete?.(msg.data);
+              es.close();
+            } else if (msg.type === "error") {
+              setError(msg.data.error);
+              setIsRunning(false);
+              callbacks?.onError?.(msg.data.error);
+              es.close();
+            }
+          } catch (err) {
+            console.error("SSE parse error", err);
           }
-        } catch (err) {
-          console.error("SSE parse error", err);
-        }
+        };
+
+        es.onerror = () => {
+          if (es.readyState === EventSource.CONNECTING) {
+            // Browser is automatically reconnecting
+            return;
+          }
+          es.close();
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.warn(`SSE stream dropped. Attempting reconnect (${retryCount}/${maxRetries})...`);
+            setTimeout(connectStream, 1000);
+          } else {
+            setError("Connection to agent lost");
+            setIsRunning(false);
+            callbacks?.onError?.("Connection lost");
+          }
+        };
       };
 
-      es.onerror = () => {
-        setError("Connection to agent lost");
-        setIsRunning(false);
-        callbacks?.onError?.("Connection lost");
-        es.close();
-      };
-
+      connectStream();
     } catch (err: any) {
       setError(err.message || "Unknown error");
       setIsRunning(false);

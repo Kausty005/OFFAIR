@@ -39,7 +39,10 @@ export default function Sidebar({ activeView, onViewChange, activeSessionId, onS
   const fetchSessions = async () => {
     try {
       const res = await fetch("/api/history");
-      if (res.ok) setSessions(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(Array.isArray(data) ? data : []);
+      }
     } catch (e) {}
   };
 

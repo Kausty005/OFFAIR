@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import re
 import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
@@ -17,10 +18,11 @@ class SessionUpdate(BaseModel):
     messages: List[Any]
 
 def get_session_file(session_id: str) -> Path:
-    if not session_id.isalnum() and "-" not in session_id:
+    if not re.match(r'^[a-zA-Z0-9_-]+$', session_id):
         raise HTTPException(status_code=400, detail="Invalid session ID")
     return HISTORY_DIR / f"{session_id}.json"
 
+@router.get("")
 @router.get("/")
 def list_sessions():
     sessions = []
