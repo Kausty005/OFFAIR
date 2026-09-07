@@ -46,9 +46,22 @@ def _strip_thinking(text: str) -> str:
     """
     if not text:
         return text
+        
     # Remove <think>...</think> blocks (including multiline)
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    return cleaned.strip()
+    
+    # If there's an unclosed <think> tag at the end (output cut off)
+    if "<think>" in cleaned:
+        cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL)
+        
+    cleaned = cleaned.strip()
+    
+    # If the model ONLY output a thought and no answer, return the original text 
+    # so the user at least sees the thought process rather than a blank screen.
+    if not cleaned and text.strip():
+        return text.strip()
+        
+    return cleaned
 
 
 def _post(endpoint: str, payload: dict, stream: bool = False, timeout: int = TIMEOUT):

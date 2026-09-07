@@ -404,10 +404,19 @@ async def search_knowledge(req: RAGSearchRequest):
 @app.post("/api/knowledge/ask")
 async def ask_knowledge(req: RAGAskRequest):
     """Ask a question and receive a grounded answer with source citations."""
-    from rag.retriever import answer_with_rag
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    return answer_with_rag(req.query, top_k=req.top_k or 5, model=req.model)
+    # answer_with_rag is synchronous (blocking HTTP call to Ollama).
+    # Run it in a thread pool so it doesn't block the async event loop.
+    from rag.retriever import answer_with_rag
+    try:
+        result = await asyncio.to_thread(
+            answer_with_rag, req.query, req.top_k or 5, req.model
+        )
+        return result
+    except Exception as e:
+        logger.exception("RAG ask failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/knowledge/reset")
@@ -417,6 +426,34 @@ async def reset_knowledge():
     ok = delete_collection()
     return {"reset": ok}
 
+
+@app.delete("/api/knowledge/{filename}")
+async def delete_knowledge_document(filename: str):
+    """Delete a specific document from the knowledge base and remove its vector chunks."""
+    from rag.vector_store import delete_document
+
+    # Prevent path traversal
+    safe_name = Path(filename).name
+    kb_path = Path("knowledge_base")
+    file_path = kb_path / safe_name
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Document '{safe_name}' not found in knowledge base")
+
+    # Remove from disk
+    try:
+        file_path.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
+
+    # Remove its vector chunks from the store
+    chunks_removed = delete_document(safe_name)
+    log("KB_DELETE", filename=safe_name, chunks_removed=chunks_removed)
+
+    return {
+        "deleted": safe_name,
+        "chunks_removed": chunks_removed,
+    }
 
 
 # ─────────────────────────────────────────────────────────────

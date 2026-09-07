@@ -158,6 +158,7 @@ def run_python_sandbox(
     # Write to a temporary file
     with tempfile.NamedTemporaryFile(
         mode="w",
+        encoding="utf-8",
         suffix=".py",
         delete=False,
         prefix="sih_sandbox_",

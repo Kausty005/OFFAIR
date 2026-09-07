@@ -109,8 +109,8 @@ Always cite sources. Do not fabricate information."""
         model=model_name,
         prompt=prompt,
         system=system,
-        temperature=0.05,
-        max_tokens=1024,
+        temperature=0.3,
+        max_tokens=2048,
     )
 
     return {

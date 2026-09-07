@@ -180,6 +180,39 @@ def get_collection_stats() -> dict:
         return {"available": False, "error": str(e), "count": 0}
 
 
+def delete_document(source_name: str) -> int:
+    """Remove all chunks belonging to a specific source document from the store.
+    
+    Args:
+        source_name: The filename (e.g. 'maintenance_sop.pdf') stored in chunk metadata.
+    
+    Returns:
+        Number of chunks removed.
+    """
+    try:
+        store = _load_store()
+        original_count = len(store["ids"])
+
+        # Keep only chunks whose metadata source does NOT match the target
+        keep_indices = [
+            i for i, meta in enumerate(store["metadatas"])
+            if meta.get("source", "") != source_name
+        ]
+
+        store["ids"]        = [store["ids"][i]        for i in keep_indices]
+        store["embeddings"] = [store["embeddings"][i] for i in keep_indices]
+        store["documents"]  = [store["documents"][i]  for i in keep_indices]
+        store["metadatas"]  = [store["metadatas"][i]  for i in keep_indices]
+
+        removed = original_count - len(store["ids"])
+        _save_store(store)
+        log("VECTOR_STORE_DELETE_DOC", source=source_name, removed=removed)
+        return removed
+    except Exception as e:
+        log("VECTOR_STORE_DELETE_DOC_ERROR", error=str(e))
+        return 0
+
+
 def delete_collection() -> bool:
     """Delete and recreate the collection (for re-ingestion)."""
     try:

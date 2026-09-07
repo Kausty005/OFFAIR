@@ -1,11 +1,12 @@
 "use client";
 
 import { GlassCard } from "@/components/common/glass-card";
-import { Activity, Shield, Database, Terminal, Cpu, Lock } from "lucide-react";
+import { Activity, Shield, Database, Terminal, Cpu, Lock, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { authService } from "@/lib/services/auth";
 
 const features = [
   { icon: Cpu, title: "Local LLMs", desc: "No data leaves your network" },
@@ -17,7 +18,30 @@ const features = [
 const roles = ["Technician", "Engineer", "Manager"];
 
 export default function LoginPage() {
+  const router = useRouter();
   const [selectedRole, setSelectedRole] = useState("Engineer");
+  const [employeeId, setEmployeeId] = useState("");
+  const [passkey, setPasskey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!employeeId || !passkey) {
+      setError("Please enter all fields");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await authService.login(employeeId, passkey, selectedRole);
+      router.push("/workbench");
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background bg-blueprint flex relative overflow-hidden w-full">
@@ -82,11 +106,13 @@ export default function LoginPage() {
               <p className="text-[14px] text-gray-400">Sign in to your sovereign workspace</p>
             </div>
             
-            <form className="space-y-8 relative z-10">
+            <form onSubmit={handleLogin} className="space-y-8 relative z-10">
               <div className="space-y-2.5">
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.15em] ml-1">Employee ID</label>
                 <input 
                   type="text" 
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
                   className="w-full bg-background/60 border border-white/[0.06] rounded-2xl px-5 py-4 text-[14px] text-white focus:outline-none focus:border-accent/60 focus:bg-white/[0.02] transition-all duration-300 placeholder:text-gray-600 shadow-inner"
                   placeholder="EMP-XXXX"
                 />
@@ -96,6 +122,8 @@ export default function LoginPage() {
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.15em] ml-1">Password</label>
                 <input 
                   type="password" 
+                  value={passkey}
+                  onChange={(e) => setPasskey(e.target.value)}
                   className="w-full bg-background/60 border border-white/[0.06] rounded-2xl px-5 py-4 text-[14px] text-white focus:outline-none focus:border-accent/60 focus:bg-white/[0.02] transition-all duration-300 placeholder:text-gray-600 shadow-inner"
                   placeholder="••••••••••••"
                 />
@@ -122,15 +150,19 @@ export default function LoginPage() {
                 </div>
               </div>
               
+              {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+
               <div className="pt-6">
-                <Link href="/workbench" className="block w-full">
-                  <button 
-                    type="button"
-                    className="w-full bg-white text-background hover:bg-gray-200 font-semibold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(255,255,255,0.1)] hover:shadow-[0_6px_20px_rgba(255,255,255,0.15)] hover:scale-[1.01] relative overflow-hidden group"
-                  >
-                    <span className="relative z-10 text-[14px]">Access Enterprise Workspace</span>
-                  </button>
-                </Link>
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-white text-background hover:bg-gray-200 disabled:bg-gray-400 font-semibold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(255,255,255,0.1)] hover:shadow-[0_6px_20px_rgba(255,255,255,0.15)] hover:scale-[1.01] relative overflow-hidden group"
+                >
+                  <span className="relative z-10 text-[14px] flex items-center gap-2">
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Access Enterprise Workspace
+                  </span>
+                </button>
               </div>
             </form>
             

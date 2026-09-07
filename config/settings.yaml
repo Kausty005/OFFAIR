@@ -30,7 +30,7 @@ security:
 # --- Ollama ---
 ollama:
   base_url: "http://localhost:11434"
-  timeout: 300
+  timeout: 900
   max_retries: 3
 
 # --- Document Processing ---

@@ -7,10 +7,10 @@ models:
 
   general:
     provider: ollama
-    name: qwen3:4b
-    description: "General reasoning and document understanding (Qwen3 4B)"
+    name: llama3:8b
+    description: "General reasoning and document understanding (Llama 3 8B)"
     context_length: 8192
-    vram_mb: 3000
+    vram_mb: 4500
     task_types:
       - general
       - document
