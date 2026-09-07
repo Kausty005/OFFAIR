@@ -153,7 +153,9 @@ def create_plan(state: AgentState) -> AgentState:
     ])
     is_docx_gen = any(re.search(p, task_lower) for p in [
         r"\b(?:make|generate|create|write)\s+(?:a\s+)?(?:word\s+document|word\s+doc|docx|report\s+as\s+docx)\b",
-        r"\bword\s+document\b", r"\bdocx\b", r"\bgenerate\s+doc\b", r"\bcreate\s+doc\b"
+        r"\bword\s+document\b", r"\bdocx\b", r"\bgenerate\s+doc\b", r"\bcreate\s+doc\b",
+        r"\bapproval\s+note\b", r"\bmaintenance\s+approval\s+note\b", r"\bmaintenance\s+note\b", r"\bapproval\s+report\b",
+        r"\b(?:make|generate|create|write)\s+.*?\b(?:approval|note|report|document)\b",
     ])
 
     # 1. Industrial Inspection report processing (with uploaded PDF)

@@ -32,7 +32,7 @@ Start-Sleep -Milliseconds 500
 # Start FastAPI backend
 Write-Host ""
 Write-Host "[2/3] Starting FastAPI backend on :8000..." -ForegroundColor Yellow
-$backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000" `
+$backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload" `
     -WorkingDirectory $PSScriptRoot -PassThru -WindowStyle Normal
 Write-Host "      [OK] Backend starting (PID $($backend.Id))" -ForegroundColor Green
 Start-Sleep -Seconds 2

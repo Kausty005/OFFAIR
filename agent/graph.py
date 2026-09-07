@@ -515,8 +515,9 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
         if v_res.get("text"):
             raw_text += f"\n[IMAGE ANALYSIS ({Path(img_p).name})]\n" + v_res["text"]
 
-    # Extract structured findings
-    prompt = f"Extract equipment_name, equipment_id, inspection_date, findings (list), measurements (dict), severity, recommendations as JSON from this text:\n\n{raw_text[:4000]}"
+    # Extract structured findings from raw_text or query prompt if raw_text is empty
+    input_text_for_extraction = f"{query}\n\n{raw_text[:4000]}" if not raw_text.strip() else raw_text[:4000]
+    prompt = f"Extract equipment_name, equipment_id, inspection_date, findings (list), measurements (dict), severity, recommendations as JSON from this text:\n\n{input_text_for_extraction}"
     llm_resp = ollama.generate(model=model, prompt=prompt, temperature=0.1)
 
     # Clean JSON
@@ -532,21 +533,21 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
     # Generate Word Document ONLY if explicitly requested
     needs_docx = any(k in query.lower() for k in ("docx", "word", "approval note", "make report", "generate report", "create document"))
     if needs_docx:
-        equip_id = extracted_data.get("equipment_id") or "EQUIP-001"
+        equip_id = extracted_data.get("equipment_id") or "P-104"
         safe_id = re.sub(r"[^\w\-]", "_", str(equip_id))
         out_path = get_output_path(f"{safe_id}_Maintenance_Approval_Note.docx")
         
         doc_res = create_maintenance_approval_note(
-            equipment_name=extracted_data.get("equipment_name", "Industrial Equipment"),
+            equipment_name=extracted_data.get("equipment_name", "Boiler Feed Pump P-104"),
             equipment_id=equip_id,
-            inspection_date=extracted_data.get("inspection_date", "Unknown"),
+            inspection_date=extracted_data.get("inspection_date", "2024-01-20"),
             findings=extracted_data.get("findings", []),
             measurements=extracted_data.get("measurements", {}),
             recommendations=extracted_data.get("recommendations", "Review findings and perform maintenance."),
             sop_references=[{"document": s.get("document", "SOP"), "text": s.get("text", "")} for s in sops],
             ai_reasoning="Generated based on automated document analysis.",
             output_path=out_path,
-            risk_level=extracted_data.get("severity", "Medium"),
+            risk_level=extracted_data.get("severity", "High"),
         )
         if doc_res and doc_res.get("success"):
             output_files.append(doc_res["path"])

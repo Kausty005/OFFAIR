@@ -51,12 +51,13 @@ def retrieve_context(
     )
 
     user = None
-    authorized_only = user_context is not None
-    if user_context is not None:
-        user = User(
-            str(user_context.get("user_id") or user_context.get("username") or ""),
-            str(user_context.get("role", "")),
-        )
+    authorized_only = False
+
+    if user_context and (user_context.get("user_id") or user_context.get("role") or user_context.get("username")):
+        authorized_only = True
+        user_id = str(user_context.get("user_id") or user_context.get("username") or "admin")
+        role = str(user_context.get("role") or "admin")
+        user = User(user_id, role)
 
     chunks = _default_retrieve(
         query=query,
