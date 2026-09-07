@@ -11,7 +11,7 @@ import sys
 import json
 import time
 from pathlib import Path
-from typing import Optional, Callable, Generator
+from typing import Optional, Callable, Generator, Any
 
 _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)
