@@ -25,6 +25,7 @@ export default function Home() {
   const [outputFiles, setOutputFiles] = useState<string[]>([]);
   const [ragSources, setRagSources] = useState<any[]>([]);
   const [session, setSession] = useState<SessionUser | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("offair_session");
@@ -98,7 +99,7 @@ export default function Home() {
   const renderView = () => {
     switch (activeView) {
       case "workbench":
-        return <WorkbenchView callbacks={agentCallbacks} />;
+        return <WorkbenchView callbacks={agentCallbacks} activeSessionId={activeSessionId} onSessionChange={setActiveSessionId} />;
       case "inspection":
         return <InspectionView callbacks={agentCallbacks} />;
       case "coding":
@@ -112,7 +113,7 @@ export default function Home() {
       case "document-tools":
         return <DocumentToolsView />;
       default:
-        return <WorkbenchView callbacks={agentCallbacks} />;
+        return <WorkbenchView callbacks={agentCallbacks} activeSessionId={activeSessionId} onSessionChange={setActiveSessionId} />;
     }
   };
 
@@ -123,7 +124,7 @@ export default function Home() {
       <Topbar systemStatus={systemStatus} session={session} onLogout={() => { localStorage.removeItem("offair_session"); setSession(null); }} />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <Sidebar activeView={activeView} onViewChange={setActiveView} />
+        <Sidebar activeView={activeView} onViewChange={setActiveView} activeSessionId={activeSessionId} onSessionChange={setActiveSessionId} />
 
         <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {renderView()}

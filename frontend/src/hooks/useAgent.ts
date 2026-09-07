@@ -27,7 +27,7 @@ export function useAgent(callbacks?: Partial<AgentCallbacks>) {
     callbacks?.onStep?.(step);
   }, [callbacks]);
 
-  const run = useCallback(async (task: string, filePaths: string[] = []) => {
+  const run = useCallback(async (task: string, filePaths: string[] = [], history: any[] = []) => {
     setIsRunning(true);
     setSteps([]);
     setResult(null);
@@ -39,6 +39,7 @@ export function useAgent(callbacks?: Partial<AgentCallbacks>) {
       const form = new FormData();
       form.append("task", task);
       form.append("files", JSON.stringify(filePaths));
+      form.append("chat_history", JSON.stringify(history));
       const session = localStorage.getItem("offair_session");
       if (session) {
         try {

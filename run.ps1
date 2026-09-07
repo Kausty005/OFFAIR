@@ -26,7 +26,7 @@ try {
 Write-Host ""
 Write-Host "[2/3] Starting FastAPI backend on :8000..." -ForegroundColor Yellow
 $backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000" `
-    -WorkingDirectory $PSScriptRoot -PassThru -WindowStyle Normal
+    -WorkingDirectory $PSScriptRoot -PassThru -NoNewWindow
 Write-Host "      [OK] Backend starting (PID $($backend.Id))" -ForegroundColor Green
 Start-Sleep -Seconds 2
 
@@ -35,7 +35,7 @@ Write-Host ""
 Write-Host "[3/3] Starting Next.js frontend on :5000..." -ForegroundColor Yellow
 $npmCmd = if ($env:OS -eq "Windows_NT") { "npm.cmd" } else { "npm" }
 $frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev" `
-    -WorkingDirectory (Join-Path $PSScriptRoot "frontend") -PassThru -WindowStyle Normal
+    -WorkingDirectory (Join-Path $PSScriptRoot "frontend") -PassThru -NoNewWindow
 if ($frontend) {
     Write-Host "      [OK] Frontend starting (PID $($frontend.Id))" -ForegroundColor Green
 } else {
@@ -60,6 +60,10 @@ try {
     Wait-Process -Id $backend.Id
 } catch {
     Write-Host "Shutting down..." -ForegroundColor Yellow
-    if (!$backend.HasExited) { $backend.Kill() }
-    if (!$frontend.HasExited) { $frontend.Kill() }
+    if (!$backend.HasExited) { 
+        Start-Process "taskkill" -ArgumentList "/F /PID $($backend.Id) /T" -NoNewWindow -Wait
+    }
+    if (!$frontend.HasExited) { 
+        Start-Process "taskkill" -ArgumentList "/F /PID $($frontend.Id) /T" -NoNewWindow -Wait
+    }
 }

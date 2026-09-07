@@ -1,0 +1,19 @@
+{
+  "id": "sqek15en",
+  "title": "generate an application for re...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "generate an application for resignation",
+      "files": [],
+      "filePaths": []
+    },
+    {
+      "role": "ai",
+      "content": "Certainly! Below is a simple application for resignation in a formal format. This template is designed to be professional and secure, suitable for use in a private, air-gapped environment.\n\n---\n\n**Application for Resignation**\n\n**Name:** [Your Full Name]\n\n**Position:** [Your Current Position]\n\n**Department:** [Your Department]\n\n**Date:** [Date of Resignation]\n\n---\n\n**To Whom It May Concern:**\n\nI, [Your Full Name], hereby formally apply to resign from my position as [Your Current Position] in [Your Department] at [Company Name]. I have been employed with [Company Name] since [Start Date] and have had the opportunity to contribute to the success of the organization.\n\nI have thoroughly enjoyed my time at [Company Name] and have learned a great deal about the company's culture and values. However, I have decided to pursue new opportunities that align better with my career goals and personal aspirations.\n\nI would like to thank [Company Name] for the support and opportunities I have had during my tenure. I am grateful for the training and development I have received and for the chance to work with such a talented and supportive team.\n\nI am confident that my skills and experience will continue to be valuable to [Company Name] and am eager to continue contributing to the success of the organization.\n\nI will work with my direct supervisor to ensure a smooth transition and to provide any necessary assistance in the process of my resignation.\n\nThank you for considering my application for resignation.\n\nSincerely,\n\n[Your Full Name]\n\n---\n\n**Note:** This application should be kept in a secure, air-gapped environment to ensure its confidentiality.",
+      "outputFiles": [],
+      "outputFilePaths": []
+    }
+  ],
+  "updatedAt": "2026-09-07T17:32:01.830552Z"
+}

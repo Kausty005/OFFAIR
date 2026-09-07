@@ -1,6 +1,7 @@
 "use client";
 
-import { Brain, Factory, Code2, Eye, BookOpen, Shield, Plus, FileStack } from "lucide-react";
+import { Brain, Factory, Code2, Eye, BookOpen, Shield, Plus, FileStack, MessageSquare, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface NavItem {
   id: string;
@@ -19,12 +20,44 @@ const NAV_ITEMS: NavItem[] = [
   { id: "security",   label: "Security & Audit",   icon: <Shield size={14} />,  group: "DATA" },
 ];
 
+interface SessionInfo {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
 interface Props {
   activeView: string;
   onViewChange: (view: string) => void;
+  activeSessionId?: string | null;
+  onSessionChange?: (id: string | null) => void;
 }
 
-export default function Sidebar({ activeView, onViewChange }: Props) {
+export default function Sidebar({ activeView, onViewChange, activeSessionId, onSessionChange }: Props) {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch("/api/history");
+      if (res.ok) setSessions(await res.json());
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchSessions();
+    const intv = setInterval(fetchSessions, 5000);
+    return () => clearInterval(intv);
+  }, []);
+
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await fetch(`/api/history/${id}`, { method: "DELETE" });
+      if (activeSessionId === id && onSessionChange) onSessionChange(null);
+      fetchSessions();
+    } catch (e) {}
+  };
+
   const groups = [...new Set(NAV_ITEMS.map(i => i.group))];
 
   return (
@@ -76,6 +109,72 @@ export default function Sidebar({ activeView, onViewChange }: Props) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Chat History section */}
+      <div style={{ flex: 1, overflowY: "auto", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "0 16px 8px"
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)" }}>
+            CHAT HISTORY
+          </div>
+          <button
+            onClick={() => {
+              if (onSessionChange) onSessionChange(null);
+              onViewChange("workbench");
+            }}
+            style={{
+              background: "transparent", border: "none", color: "var(--text-primary)",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600
+            }}
+          >
+            <Plus size={12} /> NEW
+          </button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px" }}>
+          {sessions.map(s => {
+            const isActive = activeSessionId === s.id;
+            return (
+              <div
+                key={s.id}
+                onClick={() => {
+                  if (onSessionChange) onSessionChange(s.id);
+                  onViewChange("workbench");
+                }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "7px 10px", borderRadius: 6,
+                  fontSize: 13, cursor: "pointer",
+                  color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                  background: isActive ? "var(--bg-card)" : "transparent",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "var(--bg-card-hover)"; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 9, overflow: "hidden" }}>
+                  <MessageSquare size={14} style={{ color: isActive ? "var(--accent-blue)" : "var(--text-muted)", flexShrink: 0 }} />
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {s.title}
+                  </span>
+                </div>
+                <button
+                  onClick={(e) => handleDeleteSession(e, s.id)}
+                  style={{
+                    background: "transparent", border: "none", color: "var(--text-muted)",
+                    cursor: "pointer", display: "flex", opacity: isActive ? 1 : 0.5
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--error)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Quick Demo section */}

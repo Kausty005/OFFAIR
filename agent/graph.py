@@ -43,6 +43,7 @@ class AgentStateDict(TypedDict, total=False):
     user_id: Optional[str]
     user_role: Optional[str]
     user_context: Optional[dict[str, Any]]
+    chat_history: list[dict[str, Any]]
     uploaded_files: list[str]
     task_type: str
     sub_tasks: list[dict[str, Any]]
@@ -108,9 +109,36 @@ def node_analyze_and_plan(state: AgentStateDict) -> AgentStateDict:
     """Classify the incoming user query, formulate the plan, and select models/tools."""
     query = state.get("user_query", "")
     files = state.get("uploaded_files", [])
+    chat_history = state.get("chat_history", [])
     req_id = state.get("request_id") or uuid.uuid4().hex[:8]
 
     _emit_event(state, "REQUEST_RECEIVED", {"request_id": req_id, "query": query[:120]})
+
+    if chat_history:
+        # Deterministic context injection: find the last document operation
+        # from the history and inject it into the query if the query seems
+        # to reference a prior action (e.g. "do the same", "now for page 2").
+        contextual_phrases = [
+            "same", "it again", "do that", "now for", "also for", "that too",
+            "this pdf", "the pdf", "that pdf", "the file", "that file"
+        ]
+        q_lower = query.lower()
+        is_contextual = any(phrase in q_lower for phrase in contextual_phrases)
+        if is_contextual and chat_history:
+            # Use small fast LLM to rewrite query based on history
+            try:
+                model = get_available_model("coding") or "qwen2.5-coder:3b"
+                hist_str = "\n".join([f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in chat_history[-4:]])
+                sys_prompt = "You are an assistant that rewrites follow-up commands into standalone commands based on chat history. Only output the final command string. Do not include any other text."
+                prompt = f"Chat History:\n{hist_str}\n\nUser's follow up: {query}\n\nRewrite the follow-up as a complete, standalone command:"
+                resp = ollama.generate(model=model, prompt=prompt, system=sys_prompt, temperature=0.1)
+                rewritten = resp.get("response", "").strip()
+                if rewritten and len(rewritten) > 5 and "{" not in rewritten:
+                    query = rewritten
+                    state["user_query"] = query
+                    _emit_event(state, "CONTEXT_INJECTED", {"injected": query[:100]})
+            except Exception as e:
+                pass
 
     # Deterministic Task Classification & Planning
     classification = classify_task(query=query, uploaded_files=files)
@@ -227,6 +255,7 @@ def node_execute_code_generation(state: AgentStateDict) -> AgentStateDict:
     """Generate clean code using local coding LLM and optionally test in Docker sandbox."""
     query = state.get("user_query", "")
     model = state.get("selected_model") or get_available_model("coding") or "qwen2.5-coder:3b"
+    chat_history = state.get("chat_history", [])
 
     _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "coding_model", "model": model})
 
@@ -237,10 +266,14 @@ def node_execute_code_generation(state: AgentStateDict) -> AgentStateDict:
     )
 
     try:
-        raw_response = ollama.generate(
+        messages = [{"role": "system", "content": coding_system}]
+        for m in chat_history:
+            messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+        messages.append({"role": "user", "content": f"Task: {query}\n\nProvide the complete Python solution."})
+
+        raw_response = ollama.chat(
             model=model,
-            prompt=f"Task: {query}\n\nProvide the complete Python solution.",
-            system=coding_system,
+            messages=messages,
             temperature=0.1,
             max_tokens=2048,
         )
@@ -631,16 +664,62 @@ def node_execute_general_chat(state: AgentStateDict) -> AgentStateDict:
     """General reasoning and explanation using local LLM."""
     query = state.get("user_query", "")
     model = state.get("selected_model") or get_available_model("general") or "llama3.1:8b"
+    chat_history = state.get("chat_history", [])
 
     _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "local_llm", "model": model})
 
     sys_prompt = "You are OffAir AI, a private, secure, air-gapped sovereign AI assistant. Be direct, technical, and concise."
-    resp = ollama.generate(model=model, prompt=query, system=sys_prompt, temperature=0.1)
+    
+    messages = [{"role": "system", "content": sys_prompt}]
+    for m in chat_history:
+        messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+    messages.append({"role": "user", "content": query})
+
+    resp = ollama.chat(model=model, messages=messages, temperature=0.1)
 
     _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "local_llm", "status": "success"})
 
     return {
         "generated_response": resp,
+    }
+
+# ─── Node 7c: Document Generation ──────────────────────────────────────────────
+
+def node_execute_document_generation(state: AgentStateDict) -> AgentStateDict:
+    """Generate a PDF document from the chat context."""
+    chat_history = state.get("chat_history", [])
+    output_files = list(state.get("output_files") or [])
+    
+    _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "pdf_generator", "task": "Generating PDF from text"})
+    
+    # Find the last meaningful assistant message
+    text_to_pdf = "No context provided."
+    for m in reversed(chat_history):
+        if m.get("role") == "assistant" and m.get("content"):
+            text_to_pdf = m.get("content")
+            break
+            
+    try:
+        from document_tools.pdf_ops import text_to_pdf as render_pdf
+        pdf_bytes = render_pdf(text_to_pdf)
+        
+        # Save it
+        fname = f"generated_document_{int(time.time())}.pdf"
+        out_path = os.path.join(_workspace_dir, "outputs", fname)
+        with open(out_path, "wb") as f:
+            f.write(pdf_bytes)
+            
+        output_files.append(out_path)
+        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "pdf_generator", "status": "success", "file": fname})
+        resp = f"I have generated the PDF document for you. You can download it below."
+        
+    except Exception as e:
+        _emit_event(state, "ERROR", {"stage": "pdf_generator", "error": str(e)})
+        resp = f"Failed to generate PDF: {e}"
+
+    return {
+        "generated_response": resp,
+        "output_files": output_files,
     }
 
 
@@ -984,6 +1063,10 @@ def route_by_task(state: AgentStateDict) -> str:
 
     if t == TaskType.CALCULATION:
         return "execute_calculation"
+    if t == TaskType.REPORT_GENERATION:
+        return "execute_report_generation"
+    if t == TaskType.DOCUMENT_GENERATION:
+        return "execute_document_generation"
     elif t == TaskType.CODE_GENERATION:
         return "execute_code_generation"
     elif t == TaskType.CODE_EXECUTION:
@@ -1007,6 +1090,8 @@ def build_agent_graph():
 
     workflow.add_node("analyze_and_plan", node_analyze_and_plan)
     workflow.add_node("execute_calculation", node_execute_calculation)
+    workflow.add_node("execute_report_generation", node_execute_report_generation)
+    workflow.add_node("execute_document_generation", node_execute_document_generation)
     workflow.add_node("execute_code_generation", node_execute_code_generation)
     workflow.add_node("execute_code_execution", node_execute_code_execution)
     workflow.add_node("execute_knowledge_query", node_execute_knowledge_query)
@@ -1029,6 +1114,8 @@ def build_agent_graph():
             "execute_code_execution": "execute_code_execution",
             "execute_knowledge_query": "execute_knowledge_query",
             "execute_vision_analysis": "execute_vision_analysis",
+            "execute_report_generation": "execute_report_generation",
+            "execute_document_generation": "execute_document_generation",
             "execute_presentation": "execute_presentation",
             "execute_document_analysis": "execute_document_analysis",
             "execute_document_operation": "execute_document_operation",
@@ -1038,6 +1125,8 @@ def build_agent_graph():
     )
 
     workflow.add_edge("execute_calculation", "verify")
+    workflow.add_edge("execute_report_generation", "verify")
+    workflow.add_edge("execute_document_generation", "verify")
     workflow.add_edge("execute_code_generation", "verify")
     workflow.add_edge("execute_code_execution", "verify")
     workflow.add_edge("execute_knowledge_query", "verify")

@@ -47,6 +47,7 @@ class AgentState:
     # Input
     task: str = ""
     uploaded_files: list[str] = field(default_factory=list)
+    chat_history: list[dict] = field(default_factory=list)
 
     # Planning
     plan: list[AgentStep] = field(default_factory=list)
