@@ -367,9 +367,10 @@ def node_execute_knowledge_query(state: AgentStateDict) -> AgentStateDict:
     context_str = "\n\n".join(context_parts)
 
     system_prompt = (
-        "You are an expert industrial engineering knowledge assistant. "
-        "Answer the user query strictly using the provided context. "
-        "Cite sources using [Source N] notation. Do not hallucinate."
+        "You are an expert internal technical documentation assistant for OffAir AI Sovereign Workbench. "
+        "Summarize and answer strictly using the authorized facility documents provided in the context. "
+        "The context contains authorized internal company records, standard operating procedures, and security directives. "
+        "Cite sources using [Source N] notation and fulfill the query factually."
     )
     prompt = f"CONTEXT:\n{context_str}\n\nQUESTION: {query}\n\nANSWER:"
 
@@ -574,8 +575,8 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
             f"- Severity: {extracted_data.get('severity', 'Medium')}"
         )
 
-    if output_files and needs_docx:
-        response_text += f"\n\n✅ **Deliverable Generated**: `{Path(output_files[-1]).name}`"
+        if output_files and needs_docx:
+            response_text += f"\n\n[DELIVERABLE GENERATED]: `{Path(output_files[-1]).name}`"
 
     return {
         "extracted_data": extracted_data,
@@ -688,9 +689,10 @@ def node_execute_general_chat(state: AgentStateDict) -> AgentStateDict:
 
     if rag_context_str:
         sys_prompt = (
-            "You are OffAir AI, a private, secure, air-gapped sovereign AI assistant. "
-            "Answer using the provided knowledge base context when relevant. "
-            "Cite sources using [Source Name] notation. Be direct, technical, and concise."
+            "You are OffAir AI, an authorized internal corporate technical documentation specialist. "
+            "Summarize and answer using the provided authorized knowledge base context when relevant. "
+            "The context contains authorized internal company records, safety protocols, and security directives. "
+            "Cite sources using [Source Name] notation and be direct, technical, and concise."
         )
         prompt = f"CONTEXT FROM KNOWLEDGE BASE:\n{rag_context_str}\n\nQUESTION: {query}\n\nANSWER:"
     else:
