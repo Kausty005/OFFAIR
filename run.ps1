@@ -22,6 +22,13 @@ try {
     Write-Host "      Models needed: ollama pull qwen2.5-coder:3b && ollama pull nomic-embed-text" -ForegroundColor Yellow
 }
 
+# Free ports 8000 and 5000 if currently occupied by stale processes
+Get-NetTCPConnection -LocalPort 8000, 5000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      [INFO] Freeing port $($_.LocalPort) from existing PID $($_.OwningProcess)..." -ForegroundColor Yellow
+    Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+}
+Start-Sleep -Milliseconds 500
+
 # Start FastAPI backend
 Write-Host ""
 Write-Host "[2/3] Starting FastAPI backend on :8000..." -ForegroundColor Yellow
@@ -42,8 +49,14 @@ if ($frontend) {
     Write-Host "      [ERR] Frontend failed to start" -ForegroundColor Red
 }
 
-# Detect local LAN IPv4 address
-$localIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "*Wi-Fi*" -or $_.InterfaceAlias -like "*Ethernet*" } | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+# Detect local LAN IPv4 address (ignore WSL / virtual adapters)
+$localIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+    $_.InterfaceAlias -notlike "*vEthernet*" -and 
+    $_.InterfaceAlias -notlike "*Virtual*" -and 
+    $_.InterfaceAlias -notlike "*WSL*" -and
+    $_.IPAddress -notlike "127.*" -and 
+    $_.IPAddress -notlike "169.254.*" 
+} | Sort-Object { if ($_.InterfaceAlias -like "*Wi-Fi*") { 0 } else { 1 } } | Select-Object -First 1).IPAddress
 if (!$localIp) { $localIp = "127.0.0.1" }
 
 Write-Host ""
@@ -60,11 +73,13 @@ Write-Host ""
 Write-Host "  Press Ctrl+C to stop" -ForegroundColor Gray
 Write-Host ""
 
-# Wait
+# Keep alive and monitor processes
 try {
-    Wait-Process -Id $backend.Id
-} catch {
+    while ((!$backend.HasExited) -or (!$frontend.HasExited)) {
+        Start-Sleep -Seconds 1
+    }
+} finally {
     Write-Host "Shutting down..." -ForegroundColor Yellow
-    if (!$backend.HasExited) { $backend.Kill() }
-    if (!$frontend.HasExited) { $frontend.Kill() }
+    if ($backend -and !$backend.HasExited) { Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue }
+    if ($frontend -and !$frontend.HasExited) { Stop-Process -Id $frontend.Id -Force -ErrorAction SilentlyContinue }
 }
