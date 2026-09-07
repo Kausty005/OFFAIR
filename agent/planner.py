@@ -54,10 +54,14 @@ def plan_coding_task(state: AgentState) -> AgentState:
 
 
 def plan_vision_task(state: AgentState) -> AgentState:
-    """Plan for: Upload image → Vision model → Structure observations."""
+    """Plan for: Upload image → Vision model → Structure observations → Optional DOCX."""
     state.add_step("Receive uploaded image", tool="files")
     state.add_step("Send image to local vision model", tool="vision")
     state.add_step("Structure and format observations", tool="llm")
+    task_lower = state.task.lower()
+    needs_docx = any(k in task_lower for k in ("docx", "word", "approval note", "make report", "generate report", "create document"))
+    if needs_docx:
+        state.add_step("Generate formatted Word document (.docx)", tool="docx_generator")
     state.add_step("Apply AI-generated observation disclaimer", tool="verifier")
     return state
 

@@ -427,27 +427,6 @@ class Agent:
         img_files = [f for f in state.uploaded_files
                      if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp"))]
         if img_files:
-            from rag.interface import retrieve_context
-            user_context = state.tool_results.get("user_context") or getattr(state, "user_context", None)
-            ocr_probe = ""
-            try:
-                ocr_probe = ocr_image_file(img_files[0])
-            except Exception:
-                pass
-            related_context = retrieve_context(
-                f"{state.task}\n{ocr_probe[:1000]}",
-                user_context=user_context,
-                top_k=5,
-            )
-            relevant = [c for c in related_context if c.get("rerank_score", c.get("score", 0)) >= 0.45]
-            if not relevant:
-                state.final_output = (
-                    "No information available: this image has no related authorized source "
-                    "in the knowledge base, so vision analysis was not performed."
-                )
-                step.result = "VISION_REJECTED: no related authorized source in knowledge base"
-                return
-
             for img_path in img_files[:2]:
                 r = analyze_image_file(
                     img_path,

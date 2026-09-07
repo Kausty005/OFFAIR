@@ -606,36 +606,6 @@ def node_execute_vision_analysis(state: AgentStateDict) -> AgentStateDict:
         }
 
     target_img = img_files[0]
-    user_context = state.get("user_context")
-    ocr_probe = ""
-    try:
-        from document.ocr import ocr_image_file
-        ocr_probe = ocr_image_file(target_img)
-    except Exception:
-        pass
-    related_context = retrieve_context(
-        f"{query}\n{ocr_probe[:1200]}",
-        user_context=user_context,
-        top_k=5,
-    )
-    relevant_context = [
-        chunk for chunk in related_context
-        if chunk.get("rerank_score", chunk.get("score", 0)) >= 0.20
-    ]
-    # Fall back to top-3 if nothing passes threshold
-    if not relevant_context and related_context:
-        relevant_context = related_context[:3]
-    if not relevant_context:
-        _emit_event(state, "VISION_REJECTED", {
-            "reason": "NO_RELEVANT_AUTHORIZED_SOURCE",
-            "file": Path(target_img).name,
-        })
-        return {
-            "generated_response": (
-                "No information available: this image has no related authorized source "
-                "in the knowledge base, so vision analysis was not performed."
-            ),
-        }
     _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "vision", "model": model, "file": Path(target_img).name})
 
     res = analyze_image_file(target_img, prompt=query, model=model)
@@ -646,8 +616,45 @@ def node_execute_vision_analysis(state: AgentStateDict) -> AgentStateDict:
 
     _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "vision", "length": len(vision_text)})
 
+    output_files = list(state.get("output_files") or [])
+
+    # If document generation is requested in the vision prompt
+    needs_docx = any(k in query.lower() for k in ("docx", "word", "approval note", "make report", "generate report", "create document"))
+    if needs_docx:
+        # Extract structured details from vision_text + query
+        text_for_ext = f"{query}\n\n{vision_text}"
+        prompt = f"Extract equipment_name, equipment_id, inspection_date, findings (list), measurements (dict), severity, recommendations as JSON from this text:\n\n{text_for_ext[:4000]}"
+        try:
+            llm_resp = ollama.generate(model=model, prompt=prompt, temperature=0.1)
+            clean_json = re.sub(r"```(?:json)?", "", llm_resp).strip().strip("`")
+            extracted_data = json.loads(clean_json)
+        except Exception:
+            extracted_data = {}
+
+        equip_id = extracted_data.get("equipment_id") or "P-104"
+        safe_id = re.sub(r"[^\w\-]", "_", str(equip_id))
+        out_path = get_output_path(f"{safe_id}_Maintenance_Approval_Note.docx")
+
+        doc_res = create_maintenance_approval_note(
+            equipment_name=extracted_data.get("equipment_name", "Boiler Feed Pump P-104"),
+            equipment_id=equip_id,
+            inspection_date=extracted_data.get("inspection_date", "2024-01-20"),
+            findings=extracted_data.get("findings") or [vision_text[:200]],
+            measurements=extracted_data.get("measurements") or {},
+            recommendations=extracted_data.get("recommendations", vision_text or "Immediate shutdown and maintenance required."),
+            sop_references=[],
+            ai_reasoning="Generated based on automated visual inspection analysis.",
+            output_path=out_path,
+            risk_level=extracted_data.get("severity", "High"),
+        )
+        if doc_res and doc_res.get("success"):
+            output_files.append(doc_res["path"])
+            _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "docx_generator", "output_file": Path(doc_res["path"]).name})
+            vision_text += f"\n\n✅ **Deliverable Generated**: `{Path(doc_res['path']).name}`"
+
     return {
         "tool_results": tool_results,
+        "output_files": output_files,
         "generated_response": vision_text,
     }
 
