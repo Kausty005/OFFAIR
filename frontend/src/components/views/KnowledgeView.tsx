@@ -83,14 +83,10 @@ export default function KnowledgeView({ session }: { session: SessionUser }) {
       const form = new FormData();
       form.append("file", f);
       form.append("auto_ingest", "true");
-<<<<<<< HEAD
-      await fetch("/api/knowledge/upload", { method: "POST", body: form });
-=======
       form.append("session_token", session.token);
       form.append("allowed_roles", targetRoles);
       form.append("classification", "internal");
-      await fetch("http://localhost:8000/api/knowledge/upload", { method: "POST", body: form });
->>>>>>> 394925e740b2e15a7c589fa2a4e1268e51c6c6c2
+      await fetch("/api/knowledge/upload", { method: "POST", body: form });
     }
     setUploading(false);
     load();
@@ -100,15 +96,11 @@ export default function KnowledgeView({ session }: { session: SessionUser }) {
   const handleIngestAll = async () => {
     setIngesting(true);
     try {
-<<<<<<< HEAD
-      await fetch("/api/knowledge/ingest", { method: "POST" });
-=======
       const form = new FormData();
       form.append("session_token", session.token);
       form.append("allowed_roles", session.role);
       form.append("classification", "internal");
-      await fetch("http://localhost:8000/api/knowledge/ingest", { method: "POST", body: form });
->>>>>>> 394925e740b2e15a7c589fa2a4e1268e51c6c6c2
+      await fetch("/api/knowledge/ingest", { method: "POST", body: form });
       setTimeout(() => {
         load();
         setIngesting(false);
