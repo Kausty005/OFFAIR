@@ -1,0 +1,124 @@
+OFFAIR AI — SOVEREIGN AI WORKBENCH SYSTEM GUIDE
+=================================================
+Document: System Overview and User Guide
+Version: 2.0 | Date: 2024-09-07
+Project: SIH26117 - Smart India Hackathon
+
+OVERVIEW
+---------
+OffAir AI is a secure, self-hosted, offline-first enterprise AI workbench. 
+Organizations can use AI on sensitive internal data without sending that data to cloud AI providers.
+All processing happens locally on-premise using open-weight AI models via Ollama.
+
+ARCHITECTURE
+-------------
+The system runs on two laptops connected over a local network:
+- Laptop 1 (Server): FastAPI backend + LangGraph orchestration + Ollama LLM engine
+- Laptop 2 (Client): Next.js frontend web application
+
+Components:
+1. FastAPI Backend (Port 8000): REST API + SSE streaming for agent workflows
+2. LangGraph Orchestration: Stateful multi-step AI agent workflow engine
+3. Ollama LLM Runtime: Local inference of open-weight language models
+4. RAG Pipeline: Hybrid retrieval (semantic + keyword) over local vector store
+5. Docker Sandbox: Isolated Python code execution for untrusted code
+6. Next.js Frontend (Port 5000): Modern web UI for all user interactions
+
+KEY FEATURES
+-------------
+1. Secure RAG (Retrieval-Augmented Generation):
+   - Upload PDFs, DOCX, TXT documents to the knowledge base
+   - AI answers are grounded in your uploaded documents
+   - Role-based access control (Admin, Engineer, Employee roles)
+   - No data leaves your local network
+
+2. Document Generation:
+   - Generate Word (.docx) reports from natural language prompts
+   - Generate PDF reports with formatted content
+   - Generate PowerPoint (.pptx) presentations with structured slides
+   - All documents saved to workspace/outputs for download
+
+3. Code Execution Sandbox:
+   - Write and run Python code in an isolated Docker container
+   - Network disabled inside sandbox for security
+   - Supports standard Python libraries and data science tools
+   - Execution timeout: 30 seconds (configurable)
+
+4. Industrial Calculations:
+   - Pump efficiency calculations (input power vs output power)
+   - Bearing temperature risk assessment
+   - Expression evaluator for engineering calculations
+
+5. Document Analysis:
+   - Upload inspection reports and maintenance documents
+   - AI extracts findings, measurements, and recommendations
+   - Cross-references against uploaded SOPs in knowledge base
+   - Auto-generates maintenance approval note Word document
+
+HOW TO USE THE CHAT
+--------------------
+1. General Questions: Just type your question. The AI will answer and search the knowledge base.
+2. Knowledge Base Query: Ask "What does the SOP say about vibration limits?" or "According to the safety manual, what PPE is required?"
+3. Document Upload: Drag and drop a PDF/DOCX onto the chat area. The AI analyzes it.
+4. Generate Word Document: "Generate a word document about pump maintenance" → creates and downloads .docx
+5. Generate PDF: "Create a PDF report on bearing inspection" → creates and downloads .pdf
+6. Generate PowerPoint: "Make a presentation on plant safety" → creates and downloads .pptx
+7. Code: "Write a Python function to calculate pump efficiency" → generates and runs code
+8. Calculate: "Calculate 75 * 0.87" or "Calculate pump efficiency with input 75 kW output 62 kW"
+
+MODELS USED
+------------
+- General AI: llama3.1:8b (Llama 3.1 8 Billion parameters, Meta AI)
+- Coding AI: qwen2.5-coder:3b (Qwen 2.5 Coder 3B, Alibaba)
+- Embeddings: nomic-embed-text:latest (Nomic AI text embeddings)
+- Vision (Optional): llava-phi3:latest (LLaVA Phi-3 multimodal)
+
+SECURITY FEATURES
+------------------
+1. Air-Gapped Mode: No external API calls. All inference is local.
+2. RBAC: Role-based access control restricts which documents each role can see.
+3. Audit Log: All operations logged to logs/audit.jsonl.
+4. Docker Sandbox: Code execution isolated from host filesystem and network.
+5. No Cloud Dependencies: No OpenAI, no Anthropic, no Google API calls.
+
+FIVE DEMO SCENARIOS (for SIH Demonstration)
+---------------------------------------------
+Scenario 1: SOP Query
+  Question: "What is the procedure for replacing a mechanical seal on a centrifugal pump?"
+  Expected: AI retrieves relevant chunks from maintenance_sop.pdf and pump_maintenance_sop.txt
+
+Scenario 2: Inspection Report Analysis
+  Action: Upload pump_p104_inspection_report.txt or inspection_report.pdf
+  Question: "Analyze this inspection report and generate a maintenance approval note."
+  Expected: AI extracts findings, searches SOPs, generates Word document.
+
+Scenario 3: Safety Query
+  Question: "What PPE is required when working near rotating equipment?"
+  Expected: AI retrieves from plant_safety_manual.txt and answers with source citations.
+
+Scenario 4: Document Generation
+  Question: "Generate a PDF report on pump maintenance best practices."
+  Expected: AI generates a full PDF report using knowledge base context.
+
+Scenario 5: Code Generation
+  Question: "Write a Python function to calculate centrifugal pump efficiency."
+  Expected: AI generates correct Python code, optionally runs it in Docker sandbox.
+
+TROUBLESHOOTING
+----------------
+1. Chat not responding:
+   - Check Ollama is running: run "ollama ps" in terminal
+   - Check backend is running: visit http://localhost:8000/docs
+   - Restart with .\run.ps1
+
+2. Documents not generating:
+   - Ensure python-docx, fpdf, python-pptx are installed: pip install python-docx fpdf python-pptx
+   - Check workspace/outputs directory is writable
+
+3. RAG not finding results:
+   - Re-ingest knowledge base: python reingest_kb.py
+   - Check knowledge base has documents in knowledge_base/ folder
+
+4. Code execution failing:
+   - Docker must be running for sandbox execution
+   - Start Docker Desktop, then retry

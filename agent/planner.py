@@ -6,6 +6,7 @@ Returns a list of AgentStep objects that the agent will execute.
 
 import os
 import sys
+import re
 from typing import Optional
 
 _base = os.path.join(os.path.dirname(__file__), "..")
@@ -92,9 +93,37 @@ def plan_presentation_task(state: AgentState) -> AgentState:
     has_files = bool(state.uploaded_files)
     if has_files:
         state.add_step("Process uploaded files", tool="files")
+    else:
+        state.add_step("Check knowledge base for relevant context", tool="rag")
     state.add_step("Structure presentation content and slides", tool="llm")
     state.add_step("Generate PowerPoint Presentation (PPTX)", tool="pptx_generator")
     state.add_step("Verify output presentation file", tool="verifier")
+    return state
+
+
+def plan_docx_generation_task(state: AgentState) -> AgentState:
+    """Plan for: Content/Query -> Draft Word Content -> Generate DOCX -> Verify."""
+    has_files = bool(state.uploaded_files)
+    if has_files:
+        state.add_step("Process uploaded files", tool="files")
+    else:
+        state.add_step("Check knowledge base for relevant context", tool="rag")
+    state.add_step("Draft structured document content using local model", tool="llm")
+    state.add_step("Generate formatted Word document (.docx)", tool="docx_generator")
+    state.add_step("Verify generated Word document", tool="verifier")
+    return state
+
+
+def plan_pdf_generation_task(state: AgentState) -> AgentState:
+    """Plan for: Content/Query -> Draft Report Content -> Generate PDF -> Verify."""
+    has_files = bool(state.uploaded_files)
+    if has_files:
+        state.add_step("Process uploaded files", tool="files")
+    else:
+        state.add_step("Check knowledge base for relevant context", tool="rag")
+    state.add_step("Draft structured report content using local model", tool="llm")
+    state.add_step("Generate formatted PDF document (.pdf)", tool="pdf_generator")
+    state.add_step("Verify generated PDF document", tool="verifier")
     return state
 
 
@@ -113,13 +142,37 @@ def create_plan(state: AgentState) -> AgentState:
     is_inspection = any(kw in task_lower for kw in inspection_keywords)
     has_pdf = any(f.lower().endswith(".pdf") for f in state.uploaded_files)
 
-    is_doc_gen = "word document" in task_lower or "docx" in task_lower
-    is_pptx_gen = any(kw in task_lower for kw in ["pptx", "powerpoint", "slides", "presentation", "make a ppt", "generate a ppt"])
+    # Document generation format requests
+    is_pptx_gen = any(re.search(p, task_lower) for p in [
+        r"\b(?:make|generate|create)\s+(?:a\s+)?(?:ppt|pptx|powerpoint|slides|presentation)\b",
+        r"\bppt\b", r"\bpptx\b", r"\bpowerpoint\b", r"\bslides\s+on\b", r"\bpresentation\s+on\b"
+    ])
+    is_pdf_gen = any(re.search(p, task_lower) for p in [
+        r"\b(?:make|generate|create)\s+(?:a\s+)?(?:pdf|pdf\s+report|pdf\s+document)\b",
+        r"\bpdf\s+report\b", r"\bgenerate\s+pdf\b", r"\bcreate\s+pdf\b"
+    ])
+    is_docx_gen = any(re.search(p, task_lower) for p in [
+        r"\b(?:make|generate|create|write)\s+(?:a\s+)?(?:word\s+document|word\s+doc|docx|report\s+as\s+docx)\b",
+        r"\bword\s+document\b", r"\bdocx\b", r"\bgenerate\s+doc\b", r"\bcreate\s+doc\b"
+    ])
 
-    if (is_inspection and has_pdf) or "inspection agent" in task_lower or is_doc_gen:
+    # 1. Industrial Inspection report processing (with uploaded PDF)
+    if (is_inspection and has_pdf) or ("inspection agent" in task_lower and has_pdf):
         return plan_inspection_task(state)
+
+    # 2. General Presentation Generation (PPTX)
     elif is_pptx_gen:
         return plan_presentation_task(state)
+
+    # 3. General PDF Report Generation
+    elif is_pdf_gen:
+        return plan_pdf_generation_task(state)
+
+    # 4. General Word Document Generation (DOCX)
+    elif is_docx_gen:
+        return plan_docx_generation_task(state)
+
+    # 5. Domain specific
     elif task_type == "coding":
         return plan_coding_task(state)
     elif task_type == "vision":

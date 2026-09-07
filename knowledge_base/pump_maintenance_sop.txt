@@ -1,0 +1,123 @@
+CENTRIFUGAL PUMP MAINTENANCE STANDARD OPERATING PROCEDURE
+==========================================================
+Document No: SOP-MECH-042 (FICTIONAL DEMO)
+Title: Centrifugal Pump Maintenance and Inspection Procedure
+Revision: 4 | Date: 2024-01-15 | Approved By: Chief Engineer
+
+1. PURPOSE
+----------
+This procedure provides guidelines for inspection, maintenance, and overhaul of centrifugal pumps in process plants. This is a fictional demonstration document for SIH26117 OffAir AI Workbench.
+
+2. SCOPE
+--------
+Applicable to all centrifugal pumps (P-100 to P-200 series) in Process Unit A and B.
+Equipment types: Single-stage and multi-stage centrifugal pumps up to 500 kW.
+
+3. SAFETY REQUIREMENTS
+-----------------------
+3.1 Personal Protective Equipment (PPE):
+- Safety helmet, safety glasses, hearing protection
+- Chemical-resistant gloves and safety boots
+- Flame-retardant coveralls
+
+3.2 Lockout/Tagout (LOTO):
+- LOTO must be applied before any maintenance activity
+- All energy sources must be isolated: electrical, hydraulic, pressure
+- Permit-to-Work (PTW) required for all major maintenance
+
+3.3 Isolation Procedure:
+Step 1: Obtain PTW from area supervisor
+Step 2: Stop pump at control panel
+Step 3: Close isolation valves (suction and discharge)
+Step 4: Apply LOTO on motor control panel
+Step 5: Drain pump casing via drain plug
+Step 6: Verify zero pressure with pressure gauge
+
+4. INSPECTION CRITERIA AND THRESHOLDS
+---------------------------------------
+4.1 Vibration Thresholds:
+- Normal: below 2.8 mm/s RMS
+- Alert: 2.8 to 4.5 mm/s RMS (schedule inspection within 5 days)
+- Critical: above 4.5 mm/s RMS (STOP pump immediately)
+
+4.2 Bearing Temperature Thresholds:
+- Normal operating temperature: 50-70°C
+- Alert level: 70-85°C (monitor closely, check lubrication)
+- Critical level: above 85°C (stop pump, replace bearings)
+- Ambient temperature correction: measured temp minus ambient should not exceed 50°C
+
+4.3 Mechanical Seal Condition:
+- Acceptable leakage: less than 1 drop per minute (standard seals)
+- Action leakage: 3 or more drops per minute (schedule replacement within 7 days)
+- Inspect for: leakage, heat marks, face damage, spring condition
+
+4.4 Performance Parameters:
+- Flow rate deviation: Alert if >10% from design flow
+- Head deviation: Alert if >8% from rated head
+- Efficiency threshold: Replace impeller if efficiency drops below 65%
+
+5. MAINTENANCE SCHEDULE
+------------------------
+5.1 Daily Checks (Operator):
+- Check pump for unusual noise or vibration
+- Verify bearing temperature within limits
+- Check mechanical seal for leaks
+- Verify suction and discharge pressures
+- Check motor current (should be within 10% of nameplate)
+
+5.2 Weekly Maintenance:
+- Grease bearings (if grease-lubricated type)
+- Check alignment visually
+- Verify coupling guard in place
+- Clean pump exterior and drain pit
+
+5.3 Monthly Maintenance:
+- Vibration reading with portable analyzer
+- Oil level check (if oil-lubricated type)
+- Thermal imaging of motor and bearings
+- Review operating log for trends
+
+5.4 Annual Overhaul:
+- Full disassembly and inspection
+- Replace mechanical seals
+- Replace bearings
+- Check impeller clearances and wear
+- Motor winding resistance test
+- Realignment with laser alignment tool
+
+6. PUMP REASSEMBLY PROCEDURE
+------------------------------
+Step 1: Clean all components with lint-free cloth
+Step 2: Inspect wear ring clearances (replace if >2x original tolerance)
+Step 3: Install new bearings (heat to 80°C in oil bath, do not exceed 100°C)
+Step 4: Install new mechanical seal per manufacturer instructions
+Step 5: Install impeller with correct torque (refer to manufacturer specs)
+Step 6: Set impeller clearance (typically 0.3-0.5 mm, refer to datasheet)
+Step 7: Reassemble casing with new gaskets
+Step 8: Connect coupling (check gap and alignment)
+Step 9: Remove LOTO, open isolation valves slowly
+Step 10: Prime pump before starting
+Step 11: Start pump and monitor for first 15 minutes
+Step 12: Run-in period: 2 hours at 50% load, monitor temperature and vibration
+
+7. TROUBLESHOOTING GUIDE
+--------------------------
+Problem: Excessive vibration
+Causes: Imbalance, cavitation, misalignment, worn bearings, resonance
+Action: Check alignment, check NPSH available, balance impeller, replace bearings
+
+Problem: High bearing temperature
+Causes: Over-greasing, under-greasing, bearing failure, misalignment, excessive load
+Action: Check lubrication type and quantity, verify alignment, replace bearings if damaged
+
+Problem: Mechanical seal leakage
+Causes: Seal face damage, elastomer failure, incorrect installation, excessive pressure
+Action: Inspect seal faces, replace elastomers, verify seal flush piping pressure
+
+Problem: Low flow rate
+Causes: Worn impeller, air entrainment, blocked suction strainer, valve partially closed
+Action: Check strainer, verify valve positions, inspect impeller for wear or damage
+
+Problem: Pump will not start
+Causes: Motor overload trip, LOTO still applied, coupling failure
+Action: Check MCC for trip, verify LOTO removed, inspect coupling

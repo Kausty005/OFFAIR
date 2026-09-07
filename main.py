@@ -45,8 +45,8 @@ app = FastAPI(title="Sovereign AI Workbench API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000", "http://127.0.0.1:5000"],
-    allow_credentials=True,
+    allow_origins=["*"],  # Air-gapped LAN — all local-network clients allowed
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -67,6 +67,29 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@app.on_event("startup")
+async def auto_ingest_knowledge_base():
+    """Auto-ingest knowledge base on startup if it's empty or sparse."""
+    try:
+        from rag.vector_store import get_collection_stats
+        from rag.ingest import ingest_directory
+
+        stats = get_collection_stats()
+        count = stats.get("count", 0)
+        kb_path = Path("knowledge_base")
+
+        if count < 5 and kb_path.exists() and any(kb_path.iterdir()):
+            logger.info(f"Knowledge base sparse ({count} chunks). Auto-ingesting...")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: ingest_directory(str(kb_path)))
+            new_stats = get_collection_stats()
+            logger.info(f"Auto-ingest complete. KB now has {new_stats.get('count', 0)} chunks.")
+        else:
+            logger.info(f"Knowledge base ready ({count} chunks).")
+    except Exception as e:
+        logger.warning(f"Auto-ingest skipped: {e}")
+
+
 # ─────────────────────────────────────────────────────────────
 # File Upload
 # ─────────────────────────────────────────────────────────────
@@ -85,6 +108,61 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 
+@app.post("/api/ingest")
+async def ingest_to_knowledge_base(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    classification: str = Form("internal"),
+    department: str = Form(""),
+):
+    """Upload and ingest a document into the local knowledge base."""
+    from rag.ingest import ingest_file
+    KB_DIR = Path("knowledge_base")
+    KB_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename).name
+    dest = KB_DIR / safe_name
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    security_metadata = {
+        "classification": classification,
+        "department": department,
+        "allowed_roles": ["admin", "engineer", "employee"],
+    }
+    result = ingest_file(dest, security_metadata=security_metadata)
+    log("KB_INGEST", file=safe_name, chunks=result.get("chunks", 0))
+    return {
+        "filename": safe_name,
+        "chunks": result.get("chunks", 0),
+        "stored": result.get("stored", False),
+        "error": result.get("error"),
+    }
+
+
+@app.get("/api/kb/stats")
+async def kb_stats():
+    """Return knowledge base statistics."""
+    from rag.vector_store import get_collection_stats
+    stats = get_collection_stats()
+    kb_path = Path("knowledge_base")
+    docs = [f.name for f in kb_path.iterdir() if f.is_file()] if kb_path.exists() else []
+    return {**stats, "documents": docs, "document_count": len(docs)}
+
+
+@app.post("/api/kb/reingest")
+async def reingest_knowledge_base(background_tasks: BackgroundTasks):
+    """Re-ingest all documents in the knowledge_base directory."""
+    from rag.ingest import ingest_directory
+    from rag.vector_store import delete_collection
+
+    def _do_reingest():
+        delete_collection()
+        result = ingest_directory("knowledge_base")
+        log("KB_REINGEST", total_chunks=result.get("total_chunks", 0))
+
+    background_tasks.add_task(asyncio.to_thread, _do_reingest)
+    return {"status": "reingest_started", "message": "Re-ingestion is running in the background."}
+
+
 # ─────────────────────────────────────────────────────────────
 # Agent Run + SSE Stream
 # ─────────────────────────────────────────────────────────────
@@ -101,6 +179,7 @@ class CodeExecuteRequest(BaseModel):
 
 
 @app.post("/api/execute")
+@app.post("/api/code/execute")
 @app.post("/execute")
 async def execute_code_endpoint(req: CodeExecuteRequest):
     """
@@ -350,26 +429,62 @@ async def download_file(filename: str):
     if not file_path.exists():
         file_path = Path("workspace") / safe_name
     if not file_path.exists():
+        file_path = Path("workspace/outputs") / safe_name
+    if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path=str(file_path), filename=safe_name)
+
+    media_types = {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pdf": "application/pdf",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".txt": "text/plain; charset=utf-8",
+    }
+    media_type = media_types.get(file_path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path=str(file_path), filename=safe_name, media_type=media_type)
 
 
 @app.get("/api/download")
 async def download_file_by_path(path: str):
-    """Download a generated output file by full absolute path."""
-    file_path = Path(path)
-    # Security: only allow files in workspace/ dir
-    workspace_root = Path("workspace").resolve()
-    try:
-        file_path.resolve().relative_to(workspace_root)
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    """Download a generated output file by full absolute path or relative path."""
+    safe_name = Path(path).name
+
+    # Try candidates in order of preference
+    candidates = [
+        Path(path),                      # exact path as provided
+        OUTPUT_DIR / safe_name,          # just the filename in outputs dir
+        Path("workspace") / safe_name,   # workspace root fallback
+    ]
+
+    resolved = None
+    for candidate in candidates:
+        try:
+            resolved_candidate = candidate.resolve()
+            if resolved_candidate.exists() and resolved_candidate.is_file():
+                resolved = resolved_candidate
+                break
+        except Exception:
+            continue
+
+    if not resolved:
+        raise HTTPException(status_code=404, detail=f"File not found: {safe_name}")
+
+    media_types = {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pdf": "application/pdf",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".txt": "text/plain; charset=utf-8",
+    }
+    media_type = media_types.get(resolved.suffix.lower(), "application/octet-stream")
     return FileResponse(
-        path=str(file_path),
-        filename=file_path.name,
-        media_type="application/octet-stream",
+        path=str(resolved),
+        filename=safe_name,
+        media_type=media_type,
     )
 
 

@@ -32,11 +32,20 @@ from security.permissions import User
 from tools.files import save_upload, get_output_path, get_temp_path
 from tools.search import search_knowledge_base, ask_knowledge_base
 from tools.calculator import bearing_temperature_risk, pump_efficiency
-from tools.docx_generator import create_maintenance_approval_note, create_coding_report, docx_available
+from tools.docx_generator import (
+    create_maintenance_approval_note,
+    create_coding_report,
+    create_document_from_markdown,
+    docx_available,
+)
 from tools.pptx_generator import (
     create_maintenance_approval_pptx,
     create_presentation_from_markdown,
     pptx_available,
+)
+from tools.pdf_generator import (
+    create_pdf_from_markdown,
+    pdf_available,
 )
 from tools.sandbox import run_python_sandbox, docker_available
 from document.pdf_processor import process_pdf
@@ -292,6 +301,8 @@ class Agent:
             self._step_generate_docx(step, state)
         elif tool == "pptx_generator":
             self._step_generate_pptx(step, state)
+        elif tool == "pdf_generator":
+            self._step_generate_pdf(step, state)
 
         elif tool == "embeddings":
             step.result = "Embedding model ready"
@@ -830,43 +841,53 @@ Return only Python code."""
             step.result = "python-docx not installed — cannot generate DOCX"
             return
 
-        extracted = state.extracted_data
-        equipment_id = extracted.get("equipment_id") or "EQUIP-001"
-        safe_id = re.sub(r"[^\w\-]", "_", str(equipment_id))
-        filename = f"{safe_id}_Maintenance_Approval_Note.docx"
-        output_path = get_output_path(filename)
+        extracted = state.extracted_data or {}
+        # If equipment details exist, generate structured Maintenance Approval Note DOCX
+        if extracted.get("equipment_id") or extracted.get("equipment_name"):
+            equipment_id = extracted.get("equipment_id") or "EQUIP-001"
+            safe_id = re.sub(r"[^\w\-]", "_", str(equipment_id))
+            filename = f"{safe_id}_Maintenance_Approval_Note.docx"
+            output_path = get_output_path(filename)
 
-        # Format SOP references
-        sop_refs = [
-            {
-                "document": r.get("document", "SOP"),
-                "page": r.get("page", ""),
-                "text": r.get("text", "")[:300],
-            }
-            for r in (state.rag_sources or [])[:5]
-        ]
+            # Format SOP references
+            sop_refs = [
+                {
+                    "document": r.get("document", "SOP"),
+                    "page": r.get("page", ""),
+                    "text": r.get("text", "")[:300],
+                }
+                for r in (state.rag_sources or [])[:5]
+            ]
 
-        # Determine risk level
-        severity = extracted.get("severity", "high").upper()
-        risk_map = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
-        risk_level = risk_map.get(severity, "HIGH")
+            # Determine risk level
+            severity = extracted.get("severity", "high").upper()
+            risk_map = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
+            risk_level = risk_map.get(severity, "HIGH")
 
-        result = create_maintenance_approval_note(
-            equipment_name=extracted.get("equipment_name") or "Industrial Equipment",
-            equipment_id=equipment_id,
-            inspection_date=extracted.get("inspection_date") or "See Document",
-            findings=extracted.get("findings") or [],
-            measurements=extracted.get("measurements") or {},
-            recommendations=state.tool_results.get("reasoning", extracted.get("recommendations", "")),
-            sop_references=sop_refs,
-            ai_reasoning=state.tool_results.get("reasoning", ""),
-            output_path=output_path,
-            risk_level=risk_level,
-        )
+            result = create_maintenance_approval_note(
+                equipment_name=extracted.get("equipment_name") or "Industrial Equipment",
+                equipment_id=equipment_id,
+                inspection_date=extracted.get("inspection_date") or "See Document",
+                findings=extracted.get("findings") or [],
+                measurements=extracted.get("measurements") or {},
+                recommendations=state.tool_results.get("reasoning", extracted.get("recommendations", "")),
+                sop_references=sop_refs,
+                ai_reasoning=state.tool_results.get("reasoning", ""),
+                output_path=output_path,
+                risk_level=risk_level,
+            )
+        else:
+            # Universal document from LLM generated response
+            content_source = state.final_output or state.tool_results.get("reasoning", "") or state.task
+            clean_title = re.sub(r"(?i)\b(?:generate|create|write|make)\s+(?:a\s+)?(?:word\s+document|word\s+doc|docx|report)\s+(?:about|on|for)?\s*", "", state.task).strip()
+            safe_title = re.sub(r"[^\w\-]", "_", (clean_title or state.task)[:30]).strip("_") or "Document"
+            filename = f"{safe_title}.docx"
+            output_path = get_output_path(filename)
+            result = create_document_from_markdown(content_source, title=clean_title or state.task[:40], output_path=output_path)
 
         if result["success"]:
             state.output_files.append(str(result["path"]))
-            step.result = f"Generated: {filename} ({result.get('size', 0):,} bytes)"
+            step.result = f"Generated: {Path(result['path']).name} ({result.get('size', 0):,} bytes)"
         else:
             step.result = f"DOCX generation failed: {result.get('error')}"
 
@@ -910,16 +931,35 @@ Return only Python code."""
         else:
             # General presentation from prompt / response / markdown text
             content_source = state.final_output or state.tool_results.get("reasoning", "") or state.task
-            safe_title = re.sub(r"[^\w\-]", "_", state.task[:30]).strip("_") or "Presentation"
+            clean_title = re.sub(r"(?i)\b(?:generate|create|make)\s+(?:a\s+)?(?:ppt|pptx|powerpoint|slides|presentation)\s+(?:about|on|for)?\s*", "", state.task).strip()
+            safe_title = re.sub(r"[^\w\-]", "_", (clean_title or state.task)[:30]).strip("_") or "Presentation"
             filename = f"{safe_title}.pptx"
             output_path = get_output_path(filename)
-            result = create_presentation_from_markdown(content_source, default_title=state.task[:40], output_path=output_path)
+            result = create_presentation_from_markdown(content_source, default_title=clean_title or state.task[:40], output_path=output_path)
 
         if result["success"]:
             state.output_files.append(str(result["path"]))
             step.result = f"Generated: {Path(result['path']).name} ({result.get('size', 0):,} bytes)"
         else:
             step.result = f"PPTX generation failed: {result.get('error')}"
+
+    def _step_generate_pdf(self, step: AgentStep, state: AgentState):
+        if not pdf_available():
+            step.result = "PyMuPDF/fpdf not installed — cannot generate PDF"
+            return
+
+        content_source = state.final_output or state.tool_results.get("reasoning", "") or state.task
+        clean_title = re.sub(r"(?i)\b(?:generate|create|make)\s+(?:a\s+)?(?:pdf|pdf\s+report|pdf\s+document)\s+(?:about|on|for)?\s*", "", state.task).strip()
+        safe_title = re.sub(r"[^\w\-]", "_", (clean_title or state.task)[:30]).strip("_") or "Report"
+        filename = f"{safe_title}.pdf"
+        output_path = get_output_path(filename)
+        result = create_pdf_from_markdown(content_source, title=clean_title or state.task[:40], output_path=output_path)
+
+        if result["success"]:
+            state.output_files.append(str(result["path"]))
+            step.result = f"Generated: {Path(result['path']).name} ({result.get('size', 0):,} bytes)"
+        else:
+            step.result = f"PDF generation failed: {result.get('error')}"
 
     # ── Verification ───────────────────────────────────────────────────────
 

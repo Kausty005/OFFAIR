@@ -341,7 +341,35 @@ def verify_task_result(task_type: str, state_data: dict) -> tuple[bool, list[str
                 else:
                     notes.append(f"✅ Output file verified: {p.name} ({p.stat().st_size:,} bytes)")
 
-    elif task_type in ("document", "document_analysis", "report_generation"):
+    elif task_type in ("pdf_generation", "pdf_report"):
+        output_files = state_data.get("output_files", [])
+        if output_files:
+            for f in output_files:
+                p = Path(f)
+                if p.exists() and p.stat().st_size > 100:
+                    notes.append(f"✅ PDF report verified: {p.name} ({p.stat().st_size:,} bytes)")
+                else:
+                    notes.append(f"❌ PDF report missing or empty: {f}")
+                    ok = False
+        else:
+            notes.append("❌ No PDF report output files generated")
+            ok = False
+
+    elif task_type in ("report_generation", "docx_generation"):
+        output_files = state_data.get("output_files", [])
+        if output_files:
+            for f in output_files:
+                p = Path(f)
+                if p.exists() and p.stat().st_size > 100:
+                    notes.append(f"✅ Word document verified: {p.name} ({p.stat().st_size:,} bytes)")
+                else:
+                    notes.append(f"❌ Word document missing or empty: {f}")
+                    ok = False
+        else:
+            notes.append("❌ No Word document output files generated")
+            ok = False
+
+    elif task_type in ("document", "document_analysis"):
         v_ok, v_notes = verify_inspection_output(state_data)
         notes.extend(v_notes)
         ok = ok and v_ok

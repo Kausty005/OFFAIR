@@ -24,6 +24,7 @@ try:
     _PPTX_AVAILABLE = True
 except ImportError:
     _PPTX_AVAILABLE = False
+    RGBColor = None
 
 
 # ── Design constants ──────────────────────────────────────────────────────────
@@ -43,11 +44,11 @@ else:
     _SLIDE_W = _SLIDE_H = None
 
 
-def _hex(color: RGBColor) -> str:
+def _hex(color) -> str:
     return f"{color[0]:02X}{color[1]:02X}{color[2]:02X}"
 
 
-def _set_bg(slide, color: RGBColor):
+def _set_bg(slide, color):
     """Fill slide background with a solid colour."""
     from pptx.oxml.ns import qn
     from lxml import etree

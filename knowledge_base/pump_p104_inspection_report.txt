@@ -1,0 +1,111 @@
+CRUDE OIL PUMP P-104 — INSPECTION REPORT
+==========================================
+Document No: IR-2024-P104-001 (FICTIONAL DEMO)
+Equipment: Crude Oil Transfer Pump
+Tag Number: P-104
+Location: Process Unit A, Pump Station 3
+Inspection Date: 2024-01-20
+Inspector: Senior Technician (SIH26117 Demo)
+Inspection Type: Scheduled Monthly Inspection + Follow-up (Vibration Alert)
+
+INSPECTION BACKGROUND
+-----------------------
+This inspection was triggered after the DCS operator reported elevated vibration readings on P-104 on 2024-01-18.
+P-104 has been in continuous operation since the last overhaul (March 2023, 10 months ago).
+Operating hours since last overhaul: approximately 7,200 hours.
+
+EQUIPMENT SPECIFICATIONS
+--------------------------
+Pump Type: Single-stage centrifugal, end suction, back pull-out
+Rated Flow: 120 m3/hr
+Rated Head: 85 metres
+Motor Power: 75 kW
+Speed: 2,900 rpm
+Impeller Diameter: 320 mm
+Seal Type: Single mechanical seal, API Plan 11
+
+INSPECTION FINDINGS
+---------------------
+Finding 1: VIBRATION - ELEVATED
+- Drive end bearing (DE): 4.2 mm/s RMS (ALERT: threshold is 4.5 mm/s, CRITICAL limit)
+- Non-drive end bearing (NDE): 3.6 mm/s RMS (ALERT zone)
+- Baseline reference: 1.8 mm/s (from commissioning records)
+- Dominant frequency: 1x running speed (indicates imbalance or misalignment)
+- Conclusion: Vibration elevated at both bearings; NDE shows trend toward critical
+
+Finding 2: BEARING TEMPERATURE - ALERT
+- Drive end bearing temperature: 78°C (Alert threshold: 70°C, Critical: 85°C)
+- Non-drive end bearing temperature: 72°C (Alert threshold: 70°C)
+- Ambient temperature at pump skid: 32°C
+- Delta-T (measured minus ambient): DE 46°C, NDE 40°C (limit is 50°C)
+- Conclusion: Bearings running warm; possible lubrication issue or incipient failure
+
+Finding 3: MECHANICAL SEAL - SATISFACTORY
+- Seal condition: No visible leakage from gland area
+- Seal flush piping: Clear, flow observed in sight glass
+- Leakage observed: 0 drops per minute (within acceptable limit of <1 drop/minute)
+- Seal face temperature (IR thermometer): 42°C (normal range)
+- Conclusion: Mechanical seal in satisfactory condition
+
+Finding 4: MOTOR CURRENT - SLIGHTLY ELEVATED
+- Measured motor current: 134 A (rated: 128 A, 10% limit = 140.8 A)
+- Power factor: 0.86 (normal range 0.80-0.92)
+- Motor body temperature: 58°C (normal)
+- Conclusion: Motor current slightly elevated, within limit but warrants monitoring
+
+Finding 5: COUPLING AND ALIGNMENT
+- Coupling guard: In place and secure
+- Coupling condition: No visible rubber element deterioration
+- Visual alignment check: Slight angular offset observed at coupling (needs laser check)
+- Conclusion: Recommend precision laser alignment during next scheduled stop
+
+Finding 6: SUCTION AND DISCHARGE CONDITIONS
+- Suction pressure: 2.1 bar (design: 2.0-2.5 bar) — NORMAL
+- Discharge pressure: 9.8 bar (design: 9.5-10.5 bar) — NORMAL
+- Flow rate: 115 m3/hr (design: 120 m3/hr, deviation: 4.2%) — WITHIN TOLERANCE
+- Differential pressure: 7.7 bar — NORMAL
+
+MEASUREMENTS SUMMARY
+-----------------------
+Parameter | Measured | Alert Threshold | Critical Threshold | Status
+---------|----------|----------------|-------------------|-------
+DE Vibration | 4.2 mm/s | 2.8 mm/s | 4.5 mm/s | ALERT
+NDE Vibration | 3.6 mm/s | 2.8 mm/s | 4.5 mm/s | ALERT
+DE Bearing Temp | 78°C | 70°C | 85°C | ALERT
+NDE Bearing Temp | 72°C | 70°C | 85°C | ALERT
+Motor Current | 134 A | 140 A | N/A | NORMAL
+Seal Leakage | 0 drops/min | 1 drop/min | 3 drops/min | NORMAL
+Flow Rate | 115 m3/hr | < 108 m3/hr | < 96 m3/hr | NORMAL
+
+RISK ASSESSMENT
+----------------
+Overall Risk Level: HIGH
+Justification: Two parameters (DE vibration and bearing temperatures) are in Alert zone with trends toward Critical. If DE vibration reaches 4.5 mm/s, pump must be stopped immediately. Historical trend analysis shows vibration has increased from 1.8 mm/s (baseline) to current 4.2 mm/s over 10 months, indicating progressive bearing deterioration.
+
+RECOMMENDATIONS
+-----------------
+Priority 1 (Immediate — within 24 hours):
+- Increase monitoring frequency to 4-hourly vibration checks
+- Assign dedicated operator for P-104 monitoring on each shift
+- Prepare P-104's standby pump (P-105) for immediate startup
+
+Priority 2 (Within 7 days — Scheduled Stop):
+- Perform precision laser alignment on pump-motor set
+- Replace both drive end and non-drive end bearings
+- Inspect impeller for erosion or fouling
+- Check and adjust impeller running clearances
+- Verify bearing lubrication type and quantity
+
+Priority 3 (Annual Overhaul due in 2 months):
+- Full pump disassembly and inspection
+- Replace mechanical seal as preventative measure
+- Inspect wear rings and replace if clearances exceed tolerance
+- Motor winding test and insulation resistance test
+- Update alignment records in CMMS
+
+SIGN-OFF
+---------
+Inspection completed by: Senior Maintenance Technician
+Reviewed by: Maintenance Supervisor
+PTW Status: Work completed under Cold Work Permit #CWP-2024-0342
+Next inspection due: 2024-01-27 (7-day follow-up)

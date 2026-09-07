@@ -42,8 +42,8 @@ ollama:
 document:
   max_pdf_pages: 50
   ocr_dpi: 200
-  chunk_size: 800
-  chunk_overlap: 100
+  chunk_size: 300
+  chunk_overlap: 50
   min_text_length_for_digital: 100   # chars per page; below = treat as scanned
 
 # --- RAG ---

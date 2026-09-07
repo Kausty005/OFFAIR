@@ -1,0 +1,146 @@
+PLANT SAFETY MANUAL - ROTATING EQUIPMENT AND INDUSTRIAL SAFETY
+=================================================================
+Document No: SAF-GEN-001 (FICTIONAL DEMO)
+Title: Plant Safety Manual for Rotating Equipment and Hazard Management
+Revision: 6 | Date: 2024-03-01 | Approved By: HSE Manager
+
+SECTION 1: ROTATING EQUIPMENT HAZARDS
+---------------------------------------
+1.1 Types of Rotating Equipment:
+- Centrifugal pumps, compressors, turbines
+- Agitators, mixers, fans and blowers
+- Conveyors, extruders, and gear boxes
+
+1.2 Main Hazards:
+- Entanglement with rotating parts (coupling, shaft, impeller)
+- Ejection of parts due to mechanical failure
+- High temperature surfaces causing burns
+- High pressure fluid release causing injection injuries
+- Noise induced hearing loss (>85 dB requires ear protection)
+- Vibration induced white finger syndrome (long-term exposure)
+
+1.3 Required PPE for Rotating Equipment Work:
+- Safety glasses (mandatory within 3 meters of operating equipment)
+- Hearing protection (mandatory above 85 dB(A))
+- Safety gloves (chemical-resistant for process chemicals)
+- Safety boots (steel-toed, anti-slip)
+- Face shield for high-pressure work
+- Flame-retardant coverall (FRC) in hydrocarbon areas
+
+SECTION 2: PERMIT TO WORK SYSTEM
+----------------------------------
+2.1 Types of Permits Required:
+- Cold Work Permit: For all non-ignition hazard maintenance
+- Hot Work Permit: For welding, grinding, cutting in process areas
+- Confined Space Entry Permit: For work inside vessels, tanks, sumps
+- Electrical Isolation Permit: For work on electrical equipment
+- Height Work Permit: For work at elevation above 2 meters
+
+2.2 Permit to Work Procedure:
+Step 1: Identify work scope and hazards
+Step 2: Isolate all energy sources (LOTO)
+Step 3: Test atmosphere (if confined space or hydrocarbon area)
+Step 4: Obtain permit from area supervisor
+Step 5: Briefing of all team members
+Step 6: Carry out work within permit validity
+Step 7: Clear site, remove tools and equipment
+Step 8: Close permit and verify safe restoration
+
+SECTION 3: LOCKOUT TAGOUT (LOTO) PROCEDURE
+--------------------------------------------
+3.1 Purpose of LOTO:
+LOTO prevents unexpected energization or startup of machinery during maintenance.
+
+3.2 Energy Types to be Isolated:
+- Electrical energy: Open and lock motor circuit breaker
+- Hydraulic energy: Close and lock hydraulic supply valve, bleed pressure
+- Pneumatic energy: Close and lock air supply, bleed lines to zero
+- Gravity/potential energy: Block elevated parts, lower loads
+- Thermal energy: Cool equipment to safe temperature, depressurize
+
+3.3 LOTO Steps:
+Step 1: Notify all affected employees
+Step 2: Identify all energy sources
+Step 3: Shut down equipment using normal stopping procedure
+Step 4: Isolate all energy sources (close valves, open breakers)
+Step 5: Apply personal lock and danger tag to each isolation point
+Step 6: Release/restrain stored energy (bleed pressure, drain fluid)
+Step 7: Verify isolation by attempting normal startup (NEVER start)
+Step 8: Verify zero energy with test equipment (multimeter, pressure gauge)
+
+SECTION 4: HAZARDOUS ENERGY CONTROL
+--------------------------------------
+4.1 Electrical Safety:
+- All electrical work must be done by qualified electricians
+- Minimum safe approach distance from energized conductors: 300mm (480V)
+- Voltage must be tested before working on any electrical component
+- Use insulated tools only when working near live parts
+
+4.2 Pressure Systems Safety:
+- Never open flanged connections under pressure
+- Verify gauge reading shows zero before opening any connection
+- Use appropriate rated pressure fittings and tubing
+- Pressure test after reassembly before returning to service
+
+4.3 Chemical Hazards:
+- Refer to Material Safety Data Sheet (MSDS) for each chemical
+- Use appropriate chemical-resistant PPE
+- Have eyewash station available within 10 seconds travel time
+- Decontamination shower required in acid/caustic areas
+
+SECTION 5: EMERGENCY PROCEDURES
+----------------------------------
+5.1 Fire Emergency:
+Step 1: Activate nearest fire alarm pull station
+Step 2: Call plant emergency number (ext. 911)
+Step 3: Use fire extinguisher ONLY if fire is small and you are trained
+Step 4: Evacuate to designated muster point
+Step 5: Do NOT re-enter building until cleared by emergency coordinator
+
+5.2 Chemical Spill:
+Step 1: Alert all persons in area
+Step 2: If safe, stop source of spill
+Step 3: Isolate area with barriers
+Step 4: Don appropriate PPE before cleanup
+Step 5: Report to supervisor and HSE team immediately
+
+5.3 Medical Emergency:
+Step 1: Call plant medical emergency number
+Step 2: Do not move injured person unless in immediate danger
+Step 3: Apply first aid if trained
+Step 4: Keep injured person warm and still
+Step 5: Accompany to medical facility
+
+SECTION 6: INCIDENT REPORTING
+--------------------------------
+6.1 What Must Be Reported:
+- All injuries (no matter how minor)
+- Near misses and unsafe conditions
+- Equipment damage or failure
+- Environmental releases (any spill to ground or drain)
+- Fire or explosion, even if extinguished immediately
+
+6.2 Reporting Procedure:
+- Immediate verbal report to supervisor
+- Written incident report within 24 hours (use Form HSE-001)
+- Root cause analysis for Lost Time Incidents (LTI)
+- Safety alert distributed plant-wide for significant events
+
+SECTION 7: VIBRATION AND NOISE MONITORING
+-------------------------------------------
+7.1 Vibration Standards (ISO 10816):
+- Zone A: 0-2.8 mm/s RMS (New equipment, excellent condition)
+- Zone B: 2.8-7.1 mm/s RMS (Acceptable for long-term operation)
+- Zone C: 7.1-18 mm/s RMS (Unsatisfactory, causes alarm, plan maintenance)
+- Zone D: above 18 mm/s RMS (Dangerous, stop equipment immediately)
+
+7.2 Bearing Temperature Monitoring:
+- Use calibrated IR thermometer or thermocouple probe
+- Record readings in equipment log
+- Compare with baseline readings taken when new
+- Alert engineering if increase of more than 20°C from baseline
+
+7.3 Noise Exposure Limits (AS/NZS 1269):
+- 85 dB(A) TWA 8 hours: hearing protection required
+- 140 dB peak: absolute limit regardless of duration
+- Noise mapping required for areas above 85 dB(A)

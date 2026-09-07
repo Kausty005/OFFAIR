@@ -6,6 +6,7 @@ Creates structured industrial documents with headers, tables, and footers.
 
 import os
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -288,6 +289,165 @@ def create_coding_report(
         return {"success": True, "path": str(output_path), "error": None}
     except Exception as e:
         return {"success": False, "path": "", "error": str(e)}
+
+
+def create_document_from_markdown(
+    content: str,
+    title: Optional[str] = None,
+    output_path: Optional[str | Path] = None,
+) -> dict:
+    """
+    Generate a professional Word (.docx) document from markdown or plain text.
+
+    Args:
+        content: Markdown or plain text.
+        title: Optional document title.
+        output_path: Target filesystem path. If None, auto-generated in workspace/outputs/.
+
+    Returns:
+        dict: {"success": bool, "path": str, "size": int, "error": str | None}
+    """
+    if not _DOCX_AVAILABLE:
+        return {"success": False, "path": "", "size": 0, "error": "python-docx not installed."}
+
+    from tools.files import get_output_path
+    import re
+
+    # Determine output file path
+    if output_path is None:
+        safe_title = re.sub(r"[^\w\-]", "_", (title or "Document")[:30]).strip("_") or "Document"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{safe_title}_{timestamp}.docx"
+        out_file = get_output_path(filename)
+    else:
+        out_file = Path(output_path)
+
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        doc = Document()
+
+        # Metadata
+        doc.core_properties.author = "Sovereign AI Workbench — OffAir AI"
+        doc.core_properties.title = title or "Report"
+
+        lines = content.strip().split("\n")
+        if not title:
+            for l in lines:
+                if l.startswith("#"):
+                    title = l.lstrip("#").strip()
+                    break
+            if not title:
+                title = "Technical Report"
+
+        # Document Title
+        main_h = doc.add_heading(title, 0)
+        main_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Subtitle / Generation info
+        meta_p = doc.add_paragraph()
+        meta_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        meta_run = meta_p.add_run(f"Generated on {datetime.now().strftime('%B %d, %Y at %H:%M')} | Sovereign AI Workbench")
+        meta_run.font.size = Pt(9)
+        meta_run.font.color.rgb = RGBColor(120, 120, 120)
+
+        in_code_block = False
+        table_lines = []
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Handle Markdown Table rows
+            if "|" in stripped and stripped.startswith("|"):
+                table_lines.append(stripped)
+                continue
+            elif table_lines:
+                # Flush accumulated table
+                _render_markdown_table(doc, table_lines)
+                table_lines = []
+
+            # Handle Code Blocks
+            if stripped.startswith("```"):
+                in_code_block = not in_code_block
+                continue
+
+            if not stripped:
+                continue
+
+            if in_code_block:
+                p = doc.add_paragraph(style="No Spacing")
+                p.paragraph_format.left_indent = Inches(0.4)
+                r = p.add_run(line)
+                r.font.name = "Consolas"
+                r.font.size = Pt(9.5)
+                r.font.color.rgb = RGBColor(50, 50, 50)
+            elif stripped.startswith("# "):
+                doc.add_heading(stripped[2:].strip(), level=1)
+            elif stripped.startswith("## "):
+                doc.add_heading(stripped[3:].strip(), level=2)
+            elif stripped.startswith("### "):
+                doc.add_heading(stripped[4:].strip(), level=3)
+            elif stripped.startswith("- ") or stripped.startswith("* "):
+                bullet_txt = stripped[2:].strip()
+                p = doc.add_paragraph(style="List Bullet")
+                _add_formatted_text(p, bullet_txt)
+            elif re.match(r"^\d+\.\s+", stripped):
+                num_txt = re.sub(r"^\d+\.\s+", "", stripped)
+                p = doc.add_paragraph(style="List Number")
+                _add_formatted_text(p, num_txt)
+            else:
+                p = doc.add_paragraph()
+                _add_formatted_text(p, stripped)
+
+        if table_lines:
+            _render_markdown_table(doc, table_lines)
+
+        # Add sovereign footer
+        _add_footer(
+            doc,
+            f"OffAir AI · Sovereign AI Workbench | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 100% Local"
+        )
+
+        doc.save(str(out_file))
+        size = out_file.stat().st_size
+        log("DOCX_GENERATED", path=str(out_file), size=size)
+        return {"success": True, "path": str(out_file), "size": size, "error": None}
+
+    except Exception as e:
+        log("DOCX_ERROR", error=str(e))
+        return {"success": False, "path": "", "size": 0, "error": str(e)}
+
+
+def _add_formatted_text(paragraph, text: str):
+    """Parse basic markdown bold (**text**) and italic (*text*) into docx runs."""
+    import re
+    # Simple tokenization by **bold**
+    parts = re.split(r"(\*\*.*?\*\*)", text)
+    for part in parts:
+        if part.startswith("**") and part.endswith("**"):
+            run = paragraph.add_run(part[2:-2])
+            run.bold = True
+        else:
+            paragraph.add_run(part)
+
+
+def _render_markdown_table(doc, lines: list[str]):
+    """Render markdown table lines into docx table."""
+    rows = []
+    for l in lines:
+        cleaned = l.strip().strip("|")
+        cells = [c.strip() for c in cleaned.split("|")]
+        # Skip divider row (e.g. |---|---|)
+        if all(re.match(r"^:?-+:?$", c) for c in cells if c):
+            continue
+        rows.append(cells)
+
+    if not rows:
+        return
+
+    headers = rows[0]
+    data_rows = rows[1:] if len(rows) > 1 else []
+    _add_table(doc, headers=headers, rows=data_rows)
 
 
 def docx_available() -> bool:

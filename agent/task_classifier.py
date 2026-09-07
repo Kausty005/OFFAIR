@@ -23,6 +23,7 @@ class TaskType:
     CALCULATION = "calculation"
     VISION_ANALYSIS = "vision_analysis"
     REPORT_GENERATION = "report_generation"
+    PDF_GENERATION = "pdf_generation"
     PRESENTATION_GENERATION = "presentation_generation"
 
 
@@ -65,13 +66,9 @@ _CALCULATION_PATTERNS = [
     r"^\s*calculate\s+[\d\(\)\.\+\-\*\/\^ ]+",
     r"^\s*compute\s+[\d\(\)\.\+\-\*\/\^ ]+",
     r"^\s*[\d\(\)\.\+\-\*\/\^ ]{4,}\s*$",  # Pure math expression like (25 * 4) / 10
-    r"\bcalculate\b",
-    r"\bcompute\b",
-    r"\bpump\s+efficiency\b",
-    r"\bpressure\s+drop\b",
-    r"\bbearing\s+temperature\b",
-    r"\btemperature\s+conversion\b",
-    r"\bpower\s+from\s+efficiency\b",
+    r"\bcalculate\s+(?:the\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
+    r"\bcompute\s+(?:the\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
+    r"\bmath\s+eval(?:uation)?\b",
 ]
 
 _CODE_GENERATION_PATTERNS = [
@@ -84,9 +81,9 @@ _CODE_GENERATION_PATTERNS = [
 ]
 
 _KNOWLEDGE_PATTERNS = [
-    r"\baccording\s+to\s+(?:the|our)?\s*(?:uploaded)?\s*(?:\w+\s+)?(?:sop|manual|document|procedure|guidelines)\b",
-    r"\bwhat\s+(?:is|are)\s+(?:the\s+)?procedure\b",
-    r"\bwhat\s+does\s+(?:the|our)?\s*(?:\w+\s+)?(?:sop|manual|policy|safety\s+manual)\s+say\b",
+    r"\baccording\s+to\b",
+    r"\bwhat\s+(?:is|are)\s+(?:the\s+)?(?:procedure|thresholds?|limits?|requirements?|standards?|guidelines?|rules?|specs?|specifications?|temperatures?|vibration|pressures?)\b",
+    r"\bwhat\s+does\s+(?:the|our)?\s*(?:\w+\s+)?(?:sop|manual|policy|safety\s+manual|document)\s+say\b",
     r"\bsearch\s+(?:the\s+)?(?:knowledge\s+base|kb|docs)\b",
     r"\bstandard\s+operating\s+procedure\b",
     r"\bsafety\s+protocol\b",
@@ -94,6 +91,22 @@ _KNOWLEDGE_PATTERNS = [
     r"\bsafety\s+manual\b",
     r"\bknowledge\s+base\b",
     r"\bprocedure\s+for\b",
+    r"\bthresholds?\b",
+    r"\boperating\s+limits?\b",
+    r"\bguidelines?\b",
+    r"\bspecifications?\b",
+    r"\bparameters?\b",
+    r"\bwhat\s+are\b",
+    r"\bwhat\s+is\b",
+    r"\bhow\s+do\b",
+    r"\bhow\s+to\b",
+    r"\bwhen\s+to\b",
+    r"\bexplain\b",
+    r"\bdescribe\b",
+    r"\bdetails?\s+of\b",
+    r"\bbearing\b",
+    r"\bvibration\b",
+    r"\btemperature\b",
 ]
 
 _VISION_PATTERNS = [
@@ -105,9 +118,22 @@ _VISION_PATTERNS = [
     r"\bpiping\s+and\s+instrumentation\b",
 ]
 
+_PDF_PATTERNS = [
+    r"\b(?:make|generate|create|write)\s+(?:a\s+)?(?:pdf|pdf\s+report|pdf\s+document)\b",
+    r"\bpdf\s+report\b",
+    r"\bgenerate\s+pdf\b",
+    r"\bcreate\s+pdf\b",
+    r"\breport\s+as\s+pdf\b",
+    r"\bpdf\s+on\b",
+    r"\bpdf\s+about\b",
+]
+
 _REPORT_PATTERNS = [
-    r"\bgenerate\s+(?:a\s+)?(?:maintenance\s+approval\s+note|report|document|docx)\b",
-    r"\bcreate\s+(?:a\s+)?(?:word\s+document|docx|approval\s+note|report)\b",
+    r"\b(?:make|generate|create|write)\s+(?:a\s+)?(?:word\s+document|word\s+doc|docx|report\s+as\s+docx)\b",
+    r"\bgenerate\s+(?:a\s+)?(?:maintenance\s+approval\s+note|approval\s+note|word\s+document|docx)\b",
+    r"\bcreate\s+(?:a\s+)?(?:word\s+document|docx|approval\s+note)\b",
+    r"\bword\s+document\b",
+    r"\bdocx\b",
     r"\bmaintenance\s+approval\s+note\b",
 ]
 
@@ -121,10 +147,10 @@ _PRESENTATION_PATTERNS = [
 ]
 
 _DOCUMENT_ANALYSIS_PATTERNS = [
-    r"\banalyze\s+(?:this\s+)?(?:document|pdf|inspection\s+report|file)\b",
-    r"\bextract\s+findings\b",
-    r"\binspection\s+report\b",
-    r"\bextract\s+(?:data|measurements|defects)\b",
+    r"\banalyze\s+(?:this\s+)?(?:uploaded\s+)?(?:document|pdf|inspection\s+report|file|attachment)\b",
+    r"\bextract\s+findings\s+from\b",
+    r"\bparse\s+(?:this\s+)?(?:document|pdf|file)\b",
+    r"\bextract\s+(?:data|measurements|defects)\s+from\s+(?:this\s+)?(?:file|pdf|document)\b",
 ]
 
 
@@ -214,13 +240,13 @@ def classify_task(
     # 2. Check for Multi-Step Compound Request
     # Example: "Analyze this document, find relevant SOP information, calculate the efficiency, identify risks and generate a report."
     is_multi = False
-    has_doc_intent = (has_pdf or has_docx or any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS))
-    has_rag_intent = any(re.search(p, q_lower) for p in _KNOWLEDGE_PATTERNS) or "sop" in q_lower
+    has_doc_intent = (any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS) or (has_pdf and any(k in q_lower for k in ("analyze", "extract", "parse"))))
+    has_rag_intent = any(re.search(p, q_lower) for p in _KNOWLEDGE_PATTERNS)
     has_calc_intent = any(re.search(p, q_lower) for p in _CALCULATION_PATTERNS)
-    has_report_intent = any(re.search(p, q_lower) for p in _REPORT_PATTERNS)
+    has_report_intent = any(re.search(p, q_lower) for p in _REPORT_PATTERNS) or any(re.search(p, q_lower) for p in _PDF_PATTERNS) or any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS)
 
     matched_intents = sum([has_doc_intent, has_rag_intent, has_calc_intent, has_report_intent])
-    if matched_intents >= 3 or ("and" in q_lower and matched_intents >= 2 and (has_report_intent or has_doc_intent)):
+    if matched_intents >= 3 or ("and" in q_lower and matched_intents >= 2 and has_report_intent):
         is_multi = True
         steps = []
         step_id = 1
@@ -338,25 +364,24 @@ def classify_task(
         )
 
     # 7. Document Analysis (Explicit document analysis / inspection)
-    has_explicit_analysis = any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS) or any(k in q_lower for k in ("inspection", "safety", "defect", "finding", "measurement"))
-    if has_explicit_analysis or (has_pdf and any(k in q_lower for k in ("analyze", "analysis", "inspect", "sop", "compliance", "report", "finding", "measurement", "what is this document", "summarize"))):
+    has_explicit_analysis = any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS)
+    if has_explicit_analysis or (has_pdf and any(k in q_lower for k in ("analyze", "analysis", "extract", "parse", "ocr", "summarize"))):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
             PlannedStep(1, TaskType.DOCUMENT_ANALYSIS, "Process document and perform local OCR if scanned", "pdf_processor"),
             PlannedStep(2, TaskType.DOCUMENT_ANALYSIS, "Extract structured findings and measurements", "llm_extraction"),
             PlannedStep(3, TaskType.DOCUMENT_ANALYSIS, "Search SOP knowledge base for compliance criteria", "rag"),
-            PlannedStep(4, TaskType.DOCUMENT_ANALYSIS, "Generate deliverable document", "docx_generator"),
-            PlannedStep(5, TaskType.DOCUMENT_ANALYSIS, "Verify document integrity", "verifier"),
+            PlannedStep(4, TaskType.DOCUMENT_ANALYSIS, "Verify document integrity", "verifier"),
         ]
         return ClassificationResult(
             primary_task=TaskType.DOCUMENT_ANALYSIS,
-            is_multi_step=True,
+            is_multi_step=False,
             steps=steps,
             selected_model=model,
             selected_role="general",
             reason="Document analysis task routed to document extraction and OCR pipeline.",
             confidence=0.90,
-            selected_tools=["pdf_processor", "llm_extraction", "rag", "docx_generator", "verifier"],
+            selected_tools=["pdf_processor", "llm_extraction", "rag", "verifier"],
         )
 
     # 7.5. Presentation Generation
@@ -378,7 +403,26 @@ def classify_task(
             selected_tools=["llm", "pptx_generator", "verifier"],
         )
 
-    # 8. Report Generation
+    # 7.6. PDF Report Generation
+    if any(re.search(p, q_lower) for p in _PDF_PATTERNS):
+        model = get_available_model("general") or "llama3.1:8b"
+        steps = [
+            PlannedStep(1, TaskType.PDF_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.PDF_GENERATION, "Generate formatted PDF report (.pdf)", "pdf_generator"),
+            PlannedStep(3, TaskType.PDF_GENERATION, "Verify generated PDF report on filesystem", "verifier"),
+        ]
+        return ClassificationResult(
+            primary_task=TaskType.PDF_GENERATION,
+            is_multi_step=False,
+            steps=steps,
+            selected_model=model,
+            selected_role="general",
+            reason="PDF document generation request routed to PDF generator.",
+            confidence=0.92,
+            selected_tools=["llm", "pdf_generator", "verifier"],
+        )
+
+    # 8. Report Generation (Word DOCX)
     if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
