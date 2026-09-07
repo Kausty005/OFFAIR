@@ -12,10 +12,16 @@ _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)
 
 from rag.retriever import retrieve, answer_with_rag
+from security.permissions import User
 from security.audit import log
 
 
-def search_knowledge_base(query: str, top_k: int = 5) -> dict:
+def search_knowledge_base(
+    query: str,
+    top_k: int = 5,
+    user: Optional[User] = None,
+    authorized_only: bool = False,
+) -> dict:
     """
     Search the local knowledge base for passages relevant to a query.
 
@@ -28,7 +34,12 @@ def search_knowledge_base(query: str, top_k: int = 5) -> dict:
         }
     """
     log("TOOL_CALL", tool="search_knowledge_base", query=query[:100])
-    results = retrieve(query, top_k=top_k)
+    results = retrieve(
+        query,
+        top_k=top_k,
+        user=user,
+        authorized_only=authorized_only,
+    )
     return {
         "query": query,
         "results": results,
@@ -38,7 +49,12 @@ def search_knowledge_base(query: str, top_k: int = 5) -> dict:
     }
 
 
-def ask_knowledge_base(query: str, model: Optional[str] = None) -> dict:
+def ask_knowledge_base(
+    query: str,
+    model: Optional[str] = None,
+    user: Optional[User] = None,
+    authorized_only: bool = False,
+) -> dict:
     """
     Ask a question and get a grounded answer from the knowledge base.
     Combines retrieval + LLM generation with source citations.
@@ -52,4 +68,9 @@ def ask_knowledge_base(query: str, model: Optional[str] = None) -> dict:
         }
     """
     log("TOOL_CALL", tool="ask_knowledge_base", query=query[:100])
-    return answer_with_rag(query, model=model)
+    return answer_with_rag(
+        query,
+        model=model,
+        user=user,
+        authorized_only=authorized_only,
+    )

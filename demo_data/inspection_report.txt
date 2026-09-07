@@ -1,0 +1,85 @@
+
+INSPECTION REPORT
+=================
+
+[FICTIONAL/DEMO DATA - NOT REAL EQUIPMENT]
+
+Organization: DEMO Refinery Corporation (FICTIONAL)
+Plant / Unit: Crude Distillation Unit (CDU) - DEMO
+Report No: IR-2024-1047 (FICTIONAL)
+Date of Inspection: 2024-11-15
+Inspector: J. Sharma (FICTIONAL)
+Witness: R. Verma (FICTIONAL)
+
+EQUIPMENT DETAILS
+-----------------
+Equipment Name: Crude Oil Transfer Pump
+Equipment ID / Tag: P-104
+Equipment Type: Centrifugal Pump
+Service: Crude Oil Transfer (FICTIONAL)
+Rated Flow: 250 m3/hr
+Rated Head: 45 m
+Motor Power: 55 kW
+Last Maintenance: 2024-06-10
+
+INSPECTION FINDINGS
+-------------------
+
+1. VIBRATION - ABNORMAL
+   Vibration readings at pump discharge end: 8.7 mm/s (RMS)
+   Acceptable limit: 4.5 mm/s
+   Status: EXCEEDS LIMIT - Requires immediate attention
+   
+2. SEAL LEAKAGE - DETECTED
+   Mechanical seal showing minor leakage at drive end
+   Estimated leakage rate: 3-4 drops/minute
+   Seal type: Single mechanical seal, Type A
+   Status: DEGRADED - Schedule seal replacement
+
+3. BEARING TEMPERATURE - ELEVATED
+   Drive end bearing: 86 degrees Celsius
+   Non-drive end bearing: 79 degrees Celsius
+   Normal operating range: 55-75 degrees Celsius
+   Status: ABOVE NORMAL - Monitor and schedule inspection
+
+4. OPERATING PRESSURE
+   Suction pressure: 2.1 bar
+   Discharge pressure: 17.2 bar
+   Differential pressure: 15.1 bar
+   Rated differential pressure: 16.0 bar
+   Status: SLIGHTLY BELOW RATED - Acceptable
+
+5. NOISE - ABNORMAL
+   Unusual metallic noise detected at non-drive end bearing
+   Possible causes: Bearing wear, cavitation, misalignment
+   Status: INVESTIGATE
+
+6. COUPLING CONDITION
+   Flexible coupling shows signs of rubber element wear
+   Estimated remaining life: 3-6 months
+   Status: MONITOR
+
+SUMMARY
+-------
+Equipment P-104 shows multiple concurrent issues requiring maintenance attention.
+The combination of elevated bearing temperature, abnormal vibration, and seal
+leakage suggests possible bearing wear or misalignment condition.
+
+RECOMMENDATIONS
+---------------
+1. Immediate: Reduce load on pump and increase monitoring frequency
+2. Short-term (within 7 days): Replace mechanical seal
+3. Short-term (within 14 days): Inspect and replace bearings if confirmed worn
+4. Short-term: Re-align pump-motor coupling
+5. Long-term: Schedule complete pump overhaul during next planned shutdown
+
+RISK ASSESSMENT
+---------------
+Risk Level: HIGH
+Consequences if not addressed: Potential pump failure, process disruption,
+environmental release, safety hazard to personnel.
+
+Inspector Signature: ______________ Date: 2024-11-15
+Supervisor Review: ______________ Date: ____________
+
+[THIS IS FICTIONAL DEMO DATA - ALL EQUIPMENT, MEASUREMENTS, AND FINDINGS ARE INVENTED]

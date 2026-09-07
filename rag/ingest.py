@@ -14,10 +14,13 @@ _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)
 
 from security.audit import log
+from security.permissions import access_metadata
 from document.pdf_processor import process_pdf, extract_pages_digital
 from document.ocr import ocr_pdf_pages
+from document.cleaner import clean_text, detect_section
 from rag.embeddings import embed_batch
 from rag.vector_store import add_documents, get_collection_stats
+
 
 import yaml
 _cfg_path = os.path.join(_base, "config", "settings.yaml")
@@ -53,6 +56,7 @@ def _doc_id(source: str, page: int, chunk_idx: int) -> str:
 def ingest_pdf(
     pdf_path: str | Path,
     progress_callback: Optional[Callable[[str], None]] = None,
+    security_metadata: Optional[dict] = None,
 ) -> dict:
     """
     Full ingestion pipeline for a PDF file.
@@ -66,7 +70,16 @@ def ingest_pdf(
     """
     pdf_path = Path(pdf_path)
     source_name = pdf_path.name
-    log("INGEST_START", source=source_name)
+    sm = security_metadata or {}
+    sec_meta = access_metadata(
+        department=sm.get("department", ""),
+        classification=sm.get("classification", "internal"),
+        allowed_roles=sm.get("allowed_roles", ["admin", "engineer", "employee"]),
+        uploaded_by=sm.get("uploaded_by", ""),
+        min_role_level=sm.get("min_role_level"),
+        uploaded_at=sm.get("uploaded_at", ""),
+    )
+    log("INGEST_START", source=source_name, uploaded_by=sec_meta.get("uploaded_by"))
 
     def _progress(msg: str):
         if progress_callback:
@@ -90,10 +103,11 @@ def ingest_pdf(
     _progress("Chunking text...")
     all_chunks = []
     for page in pages:
-        text = page.get("text", "") or page.get("ocr_text", "")
+        text = clean_text(page.get("text", "") or page.get("ocr_text", ""))
         if not text.strip():
             continue
         chunks = _chunk_text(text)
+        section = detect_section(text)
         for ci, chunk in enumerate(chunks):
             all_chunks.append({
                 "id": _doc_id(source_name, page["page_num"], ci),
@@ -104,6 +118,8 @@ def ingest_pdf(
                     "chunk_idx": ci,
                     "path": str(pdf_path),
                     "type": "pdf",
+                    "section": section,
+                    **sec_meta,
                 },
             })
 
@@ -129,6 +145,8 @@ def ingest_pdf(
         "chunks": len(all_chunks),
         "is_scanned": pdf_data.get("is_scanned", False),
         "stored": ok,
+        "uploaded_by": sec_meta.get("uploaded_by", ""),
+        "allowed_roles": sec_meta.get("allowed_roles", []),
     }
     log("INGEST_DONE", **summary)
     _progress(f"Ingested {len(all_chunks)} chunks from {source_name}")
@@ -139,6 +157,7 @@ def ingest_text(
     text: str,
     source_name: str,
     progress_callback: Optional[Callable[[str], None]] = None,
+    security_metadata: Optional[dict] = None,
 ) -> dict:
     """Ingest plain text content into the knowledge base."""
     def _progress(msg: str):
@@ -146,7 +165,16 @@ def ingest_text(
             progress_callback(msg)
 
     _progress(f"Chunking text from {source_name}...")
-    chunks_text = _chunk_text(text)
+    sm = security_metadata or {}
+    sec_meta = access_metadata(
+        department=sm.get("department", ""),
+        classification=sm.get("classification", "internal"),
+        allowed_roles=sm.get("allowed_roles", ["admin", "engineer", "employee"]),
+        uploaded_by=sm.get("uploaded_by", ""),
+        min_role_level=sm.get("min_role_level"),
+        uploaded_at=sm.get("uploaded_at", ""),
+    )
+    chunks_text = _chunk_text(clean_text(text))
     if not chunks_text:
         return {"error": "Empty text", "chunks": 0}
 
@@ -155,7 +183,13 @@ def ingest_text(
         all_chunks.append({
             "id": _doc_id(source_name, 0, ci),
             "text": chunk,
-            "metadata": {"source": source_name, "page": "1", "chunk_idx": ci, "type": "text"},
+            "metadata": {
+                "source": source_name,
+                "page": "1",
+                "chunk_idx": ci,
+                "type": "text",
+                **sec_meta,
+            },
         })
 
     _progress(f"Embedding {len(all_chunks)} chunks...")
@@ -174,13 +208,19 @@ def ingest_text(
 def ingest_docx(
     docx_path: str | Path,
     progress_callback: Optional[Callable[[str], None]] = None,
+    security_metadata: Optional[dict] = None,
 ) -> dict:
     """Ingest a DOCX file."""
     try:
         from docx import Document
         doc = Document(str(docx_path))
         text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-        return ingest_text(text, Path(docx_path).name, progress_callback)
+        return ingest_text(
+            text,
+            Path(docx_path).name,
+            progress_callback,
+            security_metadata=security_metadata,
+        )
     except Exception as e:
         return {"error": str(e), "chunks": 0}
 
@@ -188,6 +228,7 @@ def ingest_docx(
 def ingest_file(
     file_path: str | Path,
     progress_callback: Optional[Callable[[str], None]] = None,
+    security_metadata: Optional[dict] = None,
 ) -> dict:
     """
     Ingest a single file (.pdf, .docx, .txt, .md, .csv, .json) into the knowledge base.
@@ -198,12 +239,25 @@ def ingest_file(
 
     ext = p.suffix.lower()
     if ext == ".pdf":
-        return ingest_pdf(p, progress_callback=progress_callback)
+        return ingest_pdf(
+            p,
+            progress_callback=progress_callback,
+            security_metadata=security_metadata,
+        )
     elif ext == ".docx":
-        return ingest_docx(p, progress_callback=progress_callback)
+        return ingest_docx(
+            p,
+            progress_callback=progress_callback,
+            security_metadata=security_metadata,
+        )
     elif ext in (".txt", ".md", ".csv", ".json", ".log"):
         text = p.read_text(encoding="utf-8", errors="replace")
-        return ingest_text(text, p.name, progress_callback=progress_callback)
+        return ingest_text(
+            text,
+            p.name,
+            progress_callback=progress_callback,
+            security_metadata=security_metadata,
+        )
     else:
         return {"error": f"Unsupported file type: {ext}", "chunks": 0}
 
@@ -211,6 +265,7 @@ def ingest_file(
 def ingest_directory(
     directory_path: str | Path,
     progress_callback: Optional[Callable[[str], None]] = None,
+    security_metadata: Optional[dict] = None,
 ) -> dict:
     """
     Scan a directory and ingest all supported document files into the knowledge base.
@@ -235,7 +290,11 @@ def ingest_directory(
 
     for f in files:
         _prog(f"Processing {f.name}...")
-        res = ingest_file(f, progress_callback=progress_callback)
+        res = ingest_file(
+            f,
+            progress_callback=progress_callback,
+            security_metadata=security_metadata,
+        )
         chunks = res.get("chunks", 0)
         total_chunks += chunks
         results.append({

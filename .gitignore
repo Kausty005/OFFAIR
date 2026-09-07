@@ -58,6 +58,10 @@ workspace/chroma_db/*
 !workspace/chroma_db/.gitkeep
 workspace/temporary/*
 !workspace/temporary/.gitkeep
+workspace/uploads/*
+!workspace/uploads/.gitkeep
+workspace/outputs/*
+!workspace/outputs/.gitkeep
 
 # System & Editor
 .DS_Store

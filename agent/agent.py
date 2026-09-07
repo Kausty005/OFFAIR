@@ -28,6 +28,7 @@ from router.model_router import classify, RoutingDecision
 from models.model_registry import get_available_model
 import models.ollama_client as ollama
 from security.audit import log
+from security.permissions import User
 from tools.files import save_upload, get_output_path, get_temp_path
 from tools.search import search_knowledge_base, ask_knowledge_base
 from tools.calculator import bearing_temperature_risk, pump_efficiency
@@ -166,7 +167,7 @@ class Agent:
         except Exception as e:
             log("AGENT_GRAPH_ERROR", error=str(e))
             # Fallback to legacy step execution if graph fails unexpectedly
-            return self._legacy_run(task, uploaded_files, has_image, has_pdf)
+            return self._legacy_run(task, uploaded_files, has_image, has_pdf, user_context)
 
         # Assemble backward-compatible AgentState
         state = AgentState()
@@ -199,6 +200,7 @@ class Agent:
         uploaded_files: list[str] = None,
         has_image: bool = False,
         has_pdf: bool = False,
+        user_context: dict = None,
     ) -> AgentState:
         """Fallback execution method preserving the original procedural engine."""
         uploaded_files = uploaded_files or []
@@ -207,6 +209,8 @@ class Agent:
         state = AgentState()
         state.task = task
         state.uploaded_files = uploaded_files
+        if user_context:
+            state.tool_results["user_context"] = user_context
         state.task_type = decision.task_type
         state.selected_model = decision.selected_model
         state.routing_reason = decision.reason
@@ -408,17 +412,39 @@ class Agent:
                     results.append(r["text"])
                     analyzed += 1
 
-        # Also analyze direct image uploads
+        # Also analyze direct image uploads (strictly grounded in knowledge base)
         img_files = [f for f in state.uploaded_files
-                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp"))]
-        for img_path in img_files[:2]:
-            r = analyze_image_file(
-                img_path,
-                prompt="Analyze this inspection image and identify equipment, measurements, damage, and maintenance observations.",
-                model=vision_model,
+                     if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp"))]
+        if img_files:
+            from rag.interface import retrieve_context
+            user_context = state.tool_results.get("user_context") or getattr(state, "user_context", None)
+            ocr_probe = ""
+            try:
+                ocr_probe = ocr_image_file(img_files[0])
+            except Exception:
+                pass
+            related_context = retrieve_context(
+                f"{state.task}\n{ocr_probe[:1000]}",
+                user_context=user_context,
+                top_k=5,
             )
-            if r.get("text"):
-                results.append(r["text"])
+            relevant = [c for c in related_context if c.get("rerank_score", c.get("score", 0)) >= 0.45]
+            if not relevant:
+                state.final_output = (
+                    "No information available: this image has no related authorized source "
+                    "in the knowledge base, so vision analysis was not performed."
+                )
+                step.result = "VISION_REJECTED: no related authorized source in knowledge base"
+                return
+
+            for img_path in img_files[:2]:
+                r = analyze_image_file(
+                    img_path,
+                    prompt=state.task or "Analyze this inspection image and identify equipment, measurements, damage, and maintenance observations.",
+                    model=vision_model,
+                )
+                if r.get("text"):
+                    results.append(r["text"])
 
         if results:
             vision_text = "\n\n".join(results)
@@ -506,16 +532,43 @@ class Agent:
         else:
             query = "equipment maintenance procedure inspection"
 
-        result = search_knowledge_base(query, top_k=5)
-        state.rag_sources = result.get("results", [])
+        retrieval_query = query
+        if query.strip().lower() in {"analyse document", "analyze document", "summarize document"}:
+            retrieval_query = state.tool_results.get("raw_text", "")[:3000] or query
+        user_context = state.tool_results.get("user_context") or getattr(state, "user_context", None)
+        user = None
+        authorized_only = user_context is not None
+        if user_context:
+            user = User(
+                str(user_context.get("user_id") or user_context.get("username") or ""),
+                str(user_context.get("role", "")),
+            )
+        result = search_knowledge_base(
+            retrieval_query,
+            top_k=5,
+            user=user,
+            authorized_only=authorized_only,
+        )
+        state.rag_sources = [
+            passage for passage in result.get("results", [])
+            if passage.get("rerank_score", passage.get("score", 0)) >= 0.45
+        ]
         count = result.get("count", 0)
-        step.result = f"Retrieved {count} relevant passages from local knowledge base"
+        if not state.rag_sources:
+            step.result = "RAG_REJECTED_NO_RELEVANT_SOURCE: no related authorized source found"
+        else:
+            step.result = f"Retrieved {len(state.rag_sources)} relevant passages from local knowledge base"
         log("RAG_SEARCH", chunks=count)
 
     def _step_reason(self, step: AgentStep, state: AgentState):
         model = get_available_model("general") or "llama3.1:8b"
         extracted = state.extracted_data
         rag = state.rag_sources
+
+        if not rag:
+            state.final_output = "No information available in the authorized knowledge base."
+            step.result = "RAG_REJECTED_NO_RELEVANT_SOURCE: no related authorized knowledge-base source"
+            return
 
         context = ""
         if rag:
@@ -603,9 +656,26 @@ Be concise and professional."""
 
         # ── Check model availability before calling ────────────────────────
         if not model:
+            if rag:
+                source_lines = []
+                for index, passage in enumerate(rag[:3], start=1):
+                    source = passage.get("document", "document")
+                    page = passage.get("page", "")
+                    excerpt = " ".join(passage.get("text", "").split())[:500]
+                    source_lines.append(
+                        f"[Source {index}] {source}"
+                        f"{f' (Page {page})' if page else ''}: {excerpt}"
+                    )
+                state.final_output = (
+                    "RAG_RETRIEVAL_SUCCESS: related authorized information was found.\n\n"
+                    "LLM_GENERATION_UNAVAILABLE: Ollama is reachable, but no general model is installed.\n\n"
+                    + "\n\n".join(source_lines)
+                )
+                step.result = "RAG source retrieved; generation skipped because no local model is installed"
+                return
             state.final_output = (
-                "⚠️ No AI model is available. Please start Ollama and pull a model:\n\n"
-                "`ollama serve` then `ollama pull qwen3:4b`"
+                "LLM_GENERATION_UNAVAILABLE: Ollama is reachable, but no local model is installed.\n\n"
+                "Install a configured model, then retry: `ollama pull llama3.1:8b`"
             )
             step.result = "No model available"
             return
