@@ -7,7 +7,7 @@ import {
   Code2, Play, CheckCircle, AlertTriangle,
   Terminal, Lock, WifiOff, Copy, Check,
   RotateCcw, ArrowRight, CornerDownLeft, ShieldCheck,
-  Zap, Sparkles, Clock, Layers
+  Zap, Sparkles, Clock, Layers, ChevronDown
 } from "lucide-react";
 
 interface Props {
@@ -62,6 +62,40 @@ const SAMPLE_STDIN = `PUMP-104-CRUDE
 78.4
 4.65`;
 
+const PYTHON_KEYWORDS = new Set([
+  "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else",
+  "except", "False", "finally", "for", "from", "global", "if", "import", "in", "is",
+  "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return", "True", "try",
+  "while", "with", "yield",
+]);
+
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function highlightPython(source: string) {
+  const tokenPattern = /(#[^\n]*|"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b)/g;
+  let result = "";
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tokenPattern.exec(source)) !== null) {
+    result += escapeHtml(source.slice(lastIndex, match.index));
+    const token = match[0];
+    const className = token.startsWith("#")
+      ? "syntax-comment"
+      : token.startsWith("\"") || token.startsWith("'")
+        ? "syntax-string"
+        : /^\d/.test(token)
+          ? "syntax-number"
+          : PYTHON_KEYWORDS.has(token)
+            ? "syntax-keyword"
+            : "syntax-name";
+    result += `<span class="${className}">${escapeHtml(token)}</span>`;
+    lastIndex = match.index + token.length;
+  }
+  return result + escapeHtml(source.slice(lastIndex));
+}
+
 export default function CodingView({ callbacks }: Props) {
   // Mode: "sandbox" (Direct interactive stdin execution) vs "agent" (AI code generation & agent testing)
   const [activeTab, setActiveTab] = useState<"sandbox" | "agent">("sandbox");
@@ -80,6 +114,7 @@ export default function CodingView({ callbacks }: Props) {
   const [code, setCode] = useState(SAMPLE_INTERACTIVE_CODE);
   const [stdinText, setStdinText] = useState(SAMPLE_STDIN);
   const [timeoutSec, setTimeoutSec] = useState(30);
+  const [timeoutOpen, setTimeoutOpen] = useState(false);
   const [isExecutingSandbox, setIsExecutingSandbox] = useState(false);
   const [sandboxExecResult, setSandboxExecResult] = useState<any>(null);
   const [sandboxError, setSandboxError] = useState<string | null>(null);
@@ -181,6 +216,7 @@ export default function CodingView({ callbacks }: Props) {
           }}>
             <button
               onClick={() => setActiveTab("sandbox")}
+              className={`coding-mode-tab ${activeTab === "sandbox" ? "is-active" : ""}`}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -195,12 +231,13 @@ export default function CodingView({ callbacks }: Props) {
             </button>
             <button
               onClick={() => setActiveTab("agent")}
+              className={`coding-mode-tab ${activeTab === "agent" ? "is-active" : ""}`}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "5px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600,
                 border: "none", cursor: "pointer",
-                background: activeTab === "agent" ? "var(--accent-blue)" : "transparent",
-                color: activeTab === "agent" ? "#fff" : "var(--text-secondary)",
+                background: activeTab === "agent" ? "var(--accent-orange)" : "transparent",
+                color: activeTab === "agent" ? "#000" : "var(--text-secondary)",
                 transition: "all 0.15s ease",
               }}
             >
@@ -253,7 +290,7 @@ export default function CodingView({ callbacks }: Props) {
                     setCode(SAMPLE_INTERACTIVE_CODE);
                     setStdinText(SAMPLE_STDIN);
                   }}
-                  className="btn btn-ghost"
+                  className="btn btn-ghost coding-control"
                   style={{ fontSize: 11, padding: "4px 8px", display: "flex", alignItems: "center", gap: 4 }}
                   title="Reset to sample code"
                 >
@@ -261,7 +298,7 @@ export default function CodingView({ callbacks }: Props) {
                 </button>
                 <button
                   onClick={handleCopyCode}
-                  className="btn btn-ghost"
+                  className="btn btn-ghost coding-control"
                   style={{ fontSize: 11, padding: "4px 8px", display: "flex", alignItems: "center", gap: 4 }}
                   title="Copy code to clipboard"
                 >
@@ -271,21 +308,21 @@ export default function CodingView({ callbacks }: Props) {
               </div>
             </div>
 
-            {/* Code Textarea */}
-            <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column" }}>
-              <textarea
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                spellCheck={false}
-                style={{
-                  flex: 1, width: "100%", height: "100%", padding: "14px 16px",
-                  background: "#0d1117", color: "#e6edf3",
-                  fontFamily: "'Fira Code', 'Consolas', 'Courier New', monospace",
-                  fontSize: 13, lineHeight: 1.6, resize: "none", border: "none",
-                  outline: "none", tabSize: 4
-                }}
-                placeholder="Write or paste Python code here..."
-              />
+            {/* Numbered syntax-highlighted code editor */}
+            <div className="code-editor-shell">
+              <div className="code-editor-gutter" aria-hidden="true">
+                {code.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}
+              </div>
+              <div className="code-editor-stage">
+                <pre className="code-highlight" aria-hidden="true" dangerouslySetInnerHTML={{ __html: `${highlightPython(code)}\n` }} />
+                <textarea
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  spellCheck={false}
+                  className="code-editor-input"
+                  placeholder="Write or paste Python code here..."
+                />
+              </div>
             </div>
 
             {/* Stdin Section */}
@@ -299,8 +336,8 @@ export default function CodingView({ callbacks }: Props) {
                 display: "flex", alignItems: "center", justifyContent: "space-between"
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <CornerDownLeft size={13} color="var(--accent-blue)" />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-blue)", letterSpacing: "0.04em" }}>
+                  <CornerDownLeft size={13} color="var(--accent-orange)" />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-orange)", letterSpacing: "0.04em" }}>
                     STANDARD INPUT (STDIN)
                   </span>
                   <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
@@ -316,8 +353,8 @@ export default function CodingView({ callbacks }: Props) {
                 onChange={(e) => setStdinText(e.target.value)}
                 spellCheck={false}
                 style={{
-                  flex: 1, padding: "10px 16px", background: "#161b22",
-                  color: "#58a6ff", fontFamily: "'Fira Code', monospace",
+                  flex: 1, padding: "10px 16px", background: "#fff",
+                  color: "var(--accent-orange)", fontFamily: "'JetBrains Mono', monospace",
                   fontSize: 12, lineHeight: 1.5, resize: "none", border: "none",
                   outline: "none"
                 }}
@@ -335,19 +372,21 @@ export default function CodingView({ callbacks }: Props) {
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
                   <Clock size={13} />
                   <span>Timeout:</span>
-                  <select
-                    value={timeoutSec}
-                    onChange={(e) => setTimeoutSec(Number(e.target.value))}
-                    style={{
-                      background: "var(--bg-secondary)", color: "var(--text-primary)",
-                      border: "1px solid var(--border)", borderRadius: 4,
-                      padding: "2px 6px", fontSize: 12, outline: "none"
-                    }}
-                  >
-                    <option value={10}>10s</option>
-                    <option value={30}>30s (Default)</option>
-                    <option value={60}>60s</option>
-                  </select>
+                  <div className="timeout-custom role-select">
+                    <button type="button" className="timeout-trigger" onClick={() => setTimeoutOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={timeoutOpen}>
+                      <span>{timeoutSec === 30 ? "30s (Default)" : `${timeoutSec}s`}</span>
+                      <ChevronDown size={14} className={`role-select-chevron ${timeoutOpen ? "is-rotated" : ""}`} />
+                    </button>
+                    {timeoutOpen && (
+                      <div className="timeout-menu role-select-menu" role="listbox" aria-label="Execution timeout">
+                        {[10, 30, 60].map((seconds) => (
+                          <button key={seconds} type="button" role="option" aria-selected={timeoutSec === seconds} className={`role-option ${timeoutSec === seconds ? "is-selected" : ""}`} onClick={() => { setTimeoutSec(seconds); setTimeoutOpen(false); }}>
+                            <span className="role-option-marker" />{seconds === 30 ? "30s (Default)" : `${seconds}s`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                   Isolated Container · RAM: 256MB
@@ -383,14 +422,14 @@ export default function CodingView({ callbacks }: Props) {
           {/* Right Console Output Column */}
           <div style={{
             flex: 0.9, display: "flex", flexDirection: "column",
-            background: "#090d13", overflowY: "auto", padding: "16px 20px"
+            background: "#f8fafc", overflowY: "auto", padding: "16px 20px"
           }}>
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.08)"
+              marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)"
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Terminal size={15} color="var(--accent-green)" />
+                <Terminal size={15} color="var(--accent-orange)" />
                 <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
                   Execution Console
                 </span>
@@ -416,7 +455,7 @@ export default function CodingView({ callbacks }: Props) {
               }}>
                 <div style={{
                   width: 54, height: 54, borderRadius: "50%",
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                  background: "#fff", border: "1px solid var(--border)",
                   display: "flex", alignItems: "center", justifyContent: "center"
                 }}>
                   <Play size={24} color="var(--accent-orange)" style={{ marginLeft: 3 }} />
@@ -480,7 +519,7 @@ export default function CodingView({ callbacks }: Props) {
 
                   <div style={{
                     fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 4,
-                    background: "rgba(255,255,255,0.06)", color: "var(--text-secondary)"
+                    background: "#fff", color: "var(--text-secondary)"
                   }}>
                     {sandboxExecResult.network_disabled ? "Air-Gapped" : "Online"}
                   </div>
@@ -492,9 +531,9 @@ export default function CodingView({ callbacks }: Props) {
                     STANDARD OUTPUT (STDOUT)
                   </div>
                   <div style={{
-                    background: "#0d1117", border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8, padding: "12px 14px", fontFamily: "'Fira Code', monospace",
-                    fontSize: 12, lineHeight: 1.6, color: "#7ee787", whiteSpace: "pre-wrap",
+                    background: "#fff", border: "1px solid var(--border)",
+                    borderRadius: 8, padding: "12px 14px", fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12, lineHeight: 1.6, color: "#166534", whiteSpace: "pre-wrap",
                     wordBreak: "break-word", minHeight: 80
                   }}>
                     {sandboxExecResult.stdout || <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>[No output generated on stdout]</span>}

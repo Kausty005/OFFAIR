@@ -2249,6 +2249,7 @@ export default function DocumentToolsView() {
                 <button
                   type="button"
                   onClick={() => toggleCategory(cat.id)}
+                  className={`document-tool-category ${containsActiveTool ? "is-active" : ""}`}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
                     padding: "6px 8px", borderRadius: 5, cursor: "pointer",

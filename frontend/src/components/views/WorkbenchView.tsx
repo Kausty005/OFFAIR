@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { AgentCallbacks } from "@/types";
 import { useAgent, uploadFiles } from "@/hooks/useAgent";
-import { Send, Paperclip, X, Cloud, Search, FileText, FileCheck, BookOpen, ShieldCheck, Plus, Brain, Mic, ArrowUp } from "lucide-react";
+import { Paperclip, X, FileText, FileCheck, BookOpen, ShieldCheck, Plus, Mic, ArrowUp, ArrowRight, Repeat2, Check } from "lucide-react";
 
 interface Props {
   callbacks: AgentCallbacks;
@@ -20,13 +20,114 @@ interface Message {
   outputFilePaths?: string[]; // server-side paths of agent output files
 }
 
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+}
+
 export default function WorkbenchView({ callbacks, activeSessionId, onSessionChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [voiceDraft, setVoiceDraft] = useState("");
+  const [voiceMode, setVoiceMode] = useState<"speech" | "recording">("speech");
+  const [micNotice, setMicNotice] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; path: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const speechWindow = window as Window & {
+      SpeechRecognition?: new () => SpeechRecognitionLike;
+      webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+    };
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      startAudioRecording();
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript || "";
+      setVoiceDraft(transcript);
+      setMicNotice("");
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+      setMicNotice("Microphone access was blocked. Allow microphone access and try again.");
+    };
+    recognition.onend = () => undefined;
+    recognitionRef.current = recognition;
+    setMicNotice("");
+    setVoiceMode("speech");
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const startAudioRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMicNotice("Voice input is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = () => undefined;
+      recorder.onstop = () => stream.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      setVoiceMode("recording");
+      setVoiceDraft("");
+      setMicNotice("Audio recording is active. Speech-to-text is unavailable in this browser.");
+      setIsListening(true);
+      recorder.start();
+    } catch {
+      setMicNotice("Microphone access was blocked. Allow microphone access and try again.");
+    }
+  };
+
+  const stopVoiceCapture = () => {
+    recognitionRef.current?.stop();
+    mediaRecorderRef.current?.stop();
+    audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recognitionRef.current = null;
+    mediaRecorderRef.current = null;
+    audioStreamRef.current = null;
+  };
+
+  const cancelVoiceInput = () => {
+    stopVoiceCapture();
+    setVoiceDraft("");
+    setIsListening(false);
+    setMicNotice("");
+  };
+
+  const confirmVoiceInput = () => {
+    if (voiceDraft) setInput((current) => `${current}${current ? " " : ""}${voiceDraft}`);
+    stopVoiceCapture();
+    setVoiceDraft("");
+    setIsListening(false);
+    setMicNotice("");
+  };
 
   const { run, isRunning, steps, result, error } = useAgent({
     onStart: callbacks.onStart,
@@ -204,17 +305,29 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "40px 10% 150px", display: "flex", flexDirection: "column", gap: 24 }}>
         {messages.length === 0 && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <Cloud size={48} color="var(--text-muted)" style={{ marginBottom: "24px" }} />
-            <h1 style={{ fontSize: "28px", fontWeight: 400, color: "var(--text-primary)", marginBottom: "40px" }}>
-              How should I help you?
-            </h1>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 34, maxWidth: 1140, width: "100%", margin: "0 auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "clamp(36px, 8vw, 110px)" }}>
+              <div className="document-mark" aria-hidden="true">
+                <div className="document-sheet document-sheet-left"><FileText size={106} strokeWidth={1.4} /></div>
+                <div className="document-sheet document-sheet-right"><FileText size={106} strokeWidth={1.4} /></div>
+                <Repeat2 className="document-link" size={72} strokeWidth={2.5} />
+              </div>
+              <div style={{ maxWidth: 390 }}>
+                <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 800, letterSpacing: "0.3em", marginBottom: 14 }}>OFFAIR AI</div>
+                <h1 style={{ fontSize: "clamp(34px, 4vw, 48px)", lineHeight: 1.06, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                  How should<br />I help you?
+                </h1>
+                <p style={{ color: "var(--text-secondary)", fontSize: 15, lineHeight: 1.55, margin: "24px 0 0", maxWidth: 340 }}>
+                  Transform documents, extract insights, and automate workflows - all in one place.
+                </p>
+              </div>
+            </div>
 
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center", maxWidth: "800px" }}>
-              <ActionCard icon={<FileText size={20} color="#4d9de0" />} title="Analyse document" onClick={() => setInput("Analyse document")} />
-              <ActionCard icon={<FileCheck size={20} color="#ff6b35" />} title="Generate inspection report" onClick={() => setInput("Generate inspection report")} />
-              <ActionCard icon={<BookOpen size={20} color="#00d68f" />} title="Query knowledge base" onClick={() => setInput("Query knowledge base")} />
-              <ActionCard icon={<ShieldCheck size={20} color="#a55eea" />} title="Verify air-gap security" onClick={() => setInput("Verify air-gap security")} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 18, width: "100%" }}>
+              <ActionCard icon={<FileText size={26} color="#2676e8" />} title="Analyse document" description="Extract insights and understand content" onClick={() => setInput("Analyse document")} />
+              <ActionCard icon={<FileCheck size={26} color="#ff641d" />} title="Generate inspection report" description="Create structured reports with AI" onClick={() => setInput("Generate inspection report")} />
+              <ActionCard icon={<BookOpen size={26} color="#14a95b" />} title="Query knowledge base" description="Get answers from your data" onClick={() => setInput("Query knowledge base")} />
+              <ActionCard icon={<ShieldCheck size={26} color="#7427df" />} title="Verify air-gap security" description="Ensure compliance and safety" onClick={() => setInput("Verify air-gap security")} />
             </div>
           </div>
         )}
@@ -299,8 +412,7 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
         bottom: "24px",
         left: "50%",
         transform: "translateX(-50%)",
-        width: "90%",
-        maxWidth: "800px",
+        width: "min(82%, 800px)",
         backgroundColor: "var(--bg-input)",
         borderRadius: "12px",
         border: "1px solid var(--border)",
@@ -309,6 +421,24 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
         boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
         overflow: "visible" // To show the dropdowns if any
       }}>
+        {isListening && (
+          <div className="voice-recording-bar" role="status" aria-live="polite">
+            <button type="button" className="voice-action voice-add" onClick={() => setMicNotice("Speak naturally, then confirm when ready.")} aria-label="Voice input options" title="Voice input options">
+              <Plus size={22} />
+            </button>
+            <button type="button" className="voice-action voice-cancel" onClick={cancelVoiceInput} aria-label="Cancel voice input" title="Cancel">
+              <X size={21} />
+            </button>
+            <div className="voice-waveform" aria-hidden="true">
+              {Array.from({ length: 34 }, (_, index) => <span key={index} style={{ animationDelay: `${index * 35}ms` }} />)}
+            </div>
+            <div className="voice-transcript">{voiceDraft || (voiceMode === "recording" ? "Recording audio..." : "Listening...")}</div>
+            <button type="button" className="voice-action voice-confirm" onClick={confirmVoiceInput} aria-label="Use voice input" title="Use voice input">
+              <Check size={22} />
+            </button>
+          </div>
+        )}
+
         {/* Uploaded files chips inside input box */}
         {uploadedFiles.length > 0 && (
           <div style={{ padding: "12px 16px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -361,7 +491,7 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
             alignItems: "center"
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <button 
+              <button
                 onClick={() => fileRef.current?.click()}
                 disabled={isRunning}
                 style={{
@@ -389,7 +519,16 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
               <div style={{ fontSize: "12px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" }}>
                 Local AI <span style={{ fontSize: "10px" }}>▼</span>
               </div>
-              <Mic size={18} color="var(--text-muted)" style={{ cursor: "pointer" }} />
+              <button
+                type="button"
+                className={`mic-button ${isListening ? "is-listening" : ""}`}
+                onClick={toggleListening}
+                disabled={isRunning}
+                aria-label={isListening ? "Stop voice input" : "Start voice input"}
+                title={isListening ? "Stop voice input" : "Speak your request"}
+              >
+                <Mic size={18} />
+              </button>
               <button 
                 onClick={handleSend}
                 disabled={isRunning || !input.trim()}
@@ -406,26 +545,26 @@ export default function WorkbenchView({ callbacks, activeSessionId, onSessionCha
               </button>
             </div>
           </div>
+          {micNotice && <div className="mic-notice">{micNotice}</div>}
         </div>
       </div>
     </div>
   );
 }
 
-function ActionCard({ icon, title, onClick }: { icon: React.ReactNode, title: string, onClick?: () => void }) {
+function ActionCard({ icon, title, description, onClick }: { icon: React.ReactNode, title: string, description: string, onClick?: () => void }) {
   return (
     <div 
       onClick={onClick}
       style={{
-        width: "180px",
-        height: "120px",
+        minHeight: "166px",
         backgroundColor: "var(--bg-primary)",
         border: "1px solid var(--border)",
         borderRadius: "12px",
-        padding: "16px",
+        padding: "18px 20px 16px",
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
+        gap: "14px",
         cursor: "pointer",
         transition: "border-color 0.2s"
       }} 
@@ -433,7 +572,9 @@ function ActionCard({ icon, title, onClick }: { icon: React.ReactNode, title: st
       onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
     >
       <div>{icon}</div>
-      <div style={{ fontSize: "13px", color: "var(--text-primary)", lineHeight: 1.4 }}>{title}</div>
+      <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.1 }}>{title}</div>
+      <div style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.4 }}>{description}</div>
+      <ArrowRight size={17} color="var(--text-secondary)" style={{ marginTop: "auto" }} />
     </div>
   );
 }
