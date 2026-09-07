@@ -62,7 +62,7 @@ export default function Sidebar({ activeView, onViewChange, activeSessionId, onS
 
   return (
     <div style={{
-      width: 220,
+      width: 270,
       backgroundColor: "var(--bg-secondary)",
       borderRight: "1px solid var(--border)",
       display: "flex",
