@@ -1,0 +1,17 @@
+{
+  "id": "y8gjfo1f",
+  "title": "delete page 1 of this pdf",
+  "messages": [
+    {
+      "role": "user",
+      "content": "delete page 1 of this pdf",
+      "files": [
+        "merged_1788776505.pdf"
+      ],
+      "filePaths": [
+        "workspace\\uploads\\merged_1788776505.pdf"
+      ]
+    }
+  ],
+  "updatedAt": "2026-09-07T17:02:04.112618Z"
+}

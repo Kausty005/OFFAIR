@@ -55,6 +55,9 @@ app.add_middleware(
 # ── Document Tools (no AI/Ollama/Docker dependency) ─────────────────────────
 app.include_router(document_tools_router)
 
+from router.history import router as history_router
+app.include_router(history_router)
+
 # Task queue registry: task_id -> asyncio.Queue
 task_queues: dict[str, asyncio.Queue] = {}
 # Task state registry: task_id -> AgentState
@@ -207,6 +210,7 @@ async def run_agent_endpoint(
     task: str = Form(...),
     files: str = Form("[]"),
     user_context: str = Form("{}"),
+    chat_history: str = Form("[]"),
 ):
     """
     Start an agent run via LangGraph stateful orchestration.
@@ -221,6 +225,11 @@ async def run_agent_endpoint(
         u_context = json.loads(user_context)
     except Exception:
         u_context = {}
+
+    try:
+        c_history = json.loads(chat_history)
+    except Exception:
+        c_history = []
 
     if u_context.get("session_token"):
         from security.auth import user_from_token
@@ -243,6 +252,7 @@ async def run_agent_endpoint(
         for f in file_paths
     )
     has_pdf = any(f.lower().endswith(".pdf") for f in file_paths)
+    logger.info(f"[API/RUN] task={task!r:.80} files={file_paths} history_len={len(c_history)}")
 
     def _push(event_type: str, data: dict):
         """Thread-safe push to queue."""
@@ -271,6 +281,7 @@ async def run_agent_endpoint(
                 has_image=has_image,
                 has_pdf=has_pdf,
                 user_context=u_context,
+                chat_history=c_history,
             )
             task_states[task_id] = state
             global last_completed_state

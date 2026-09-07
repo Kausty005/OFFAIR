@@ -25,6 +25,7 @@ class TaskType:
     REPORT_GENERATION = "report_generation"
     PDF_GENERATION = "pdf_generation"
     PRESENTATION_GENERATION = "presentation_generation"
+    DOCUMENT_GENERATION = "document_generation"
 
 
 @dataclass
@@ -144,6 +145,12 @@ _DOCUMENT_ANALYSIS_PATTERNS = [
     r"\bextract\s+findings\s+from\b",
     r"\bparse\s+(?:this\s+)?(?:document|pdf|file)\b",
     r"\bextract\s+(?:data|measurements|defects)\s+from\s+(?:this\s+)?(?:file|pdf|document)\b",
+]
+
+_DOCUMENT_GENERATION_PATTERNS = [
+    r"\b(?:generate|create|export|make|save|give|get)\s+(?:me\s+)?(?:a\s+)?pdf\b",
+    r"\bpdf\s+(?:for|of)\s+(?:this|above|it|application|document)\b",
+    r"\bturn\s+(?:this|it|above)\s+into\s+(?:a\s+)?pdf\b",
 ]
 
 
@@ -431,6 +438,19 @@ def classify_task(
             confidence=0.95,
             selected_tools=["llm", "docx_generator", "verifier"],
         )
+
+    # 8. Document Generation (e.g. text to PDF)
+    if any(re.search(p, q_lower) for p in _DOCUMENT_GENERATION_PATTERNS):
+        res = ClassificationResult(
+            primary_task=TaskType.DOCUMENT_GENERATION,
+            is_multi_step=False,
+            steps=[PlannedStep(1, TaskType.DOCUMENT_GENERATION, "Generate document from text", "pdf_generator")],
+            selected_model="none",
+            selected_role="Document Tools",
+            reason="User requested to generate or export a PDF document.",
+            confidence=0.9
+        )
+        return res
 
     # 7.5. Presentation Generation
     if any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS):

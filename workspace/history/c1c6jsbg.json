@@ -1,0 +1,13 @@
+{
+  "id": "c1c6jsbg",
+  "title": "generate me an application for...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "generate me an application for resignation",
+      "files": [],
+      "filePaths": []
+    }
+  ],
+  "updatedAt": "2026-09-07T18:19:35.949562Z"
+}

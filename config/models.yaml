@@ -7,10 +7,10 @@ models:
 
   general:
     provider: ollama
-    name: phi3:latest
-    description: "General reasoning and document understanding (Phi-3)"
+    name: qwen2.5-coder:3b
+    description: "General reasoning and document understanding"
     context_length: 8192
-    vram_mb: 3000
+    vram_mb: 2000
     task_types:
       - general
       - document

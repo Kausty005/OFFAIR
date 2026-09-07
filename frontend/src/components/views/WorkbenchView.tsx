@@ -7,16 +7,20 @@ import { Send, Paperclip, X, Cloud, Search, FileText, FileCheck, BookOpen, Shiel
 
 interface Props {
   callbacks: AgentCallbacks;
+  activeSessionId?: string | null;
+  onSessionChange?: (id: string | null) => void;
 }
 
 interface Message {
   role: "user" | "ai";
   content: string;
-  files?: string[];
-  outputFiles?: string[]; // generated files (docx, py, etc.) from agent
+  files?: string[];         // display names
+  filePaths?: string[];     // server-side paths for reuse
+  outputFiles?: string[];   // generated files (docx, py, etc.) from agent
+  outputFilePaths?: string[]; // server-side paths of agent output files
 }
 
-export default function WorkbenchView({ callbacks }: Props) {
+export default function WorkbenchView({ callbacks, activeSessionId, onSessionChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; path: string }[]>([]);
@@ -29,21 +33,68 @@ export default function WorkbenchView({ callbacks }: Props) {
     onStep: callbacks.onStep,
     onComplete: (r) => {
       callbacks.onComplete(r);
-      setMessages(prev => [...prev, {
-        role: "ai",
+      const newMsg = {
+        role: "ai" as const,
         content: r.final_output || "Task completed.",
         outputFiles: r.output_files || [],
-      }]);
+        outputFilePaths: r.output_files || [],
+      };
+      setMessages(prev => {
+        const updated = [...prev, newMsg];
+        setTimeout(() => saveSession(updated), 0);
+        return updated;
+      });
     },
     onError: (e) => {
       callbacks.onError(e);
-      setMessages(prev => [...prev, {
-        role: "ai",
-        content: `⚠️ Error: ${e}`,
-      }]);
+      setMessages(prev => {
+        const updated = [...prev, { role: "ai" as const, content: `⚠️ Error: ${e}` }];
+        setTimeout(() => saveSession(updated), 0);
+        return updated;
+      });
     },
     setRouterInfo: callbacks.setRouterInfo,
   });
+
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  const saveSession = async (msgs: Message[]) => {
+    if (msgs.length === 0) return;
+    const sid = activeSessionIdRef.current || Math.random().toString(36).slice(2, 10);
+    if (!activeSessionIdRef.current && onSessionChange) {
+      activeSessionIdRef.current = sid; // Prevent duplicate generation before state updates
+      onSessionChange(sid);
+    }
+    
+    let title = null;
+    if (msgs.length <= 2 && msgs[0].role === "user") {
+      title = msgs[0].content.slice(0, 30) + (msgs[0].content.length > 30 ? "..." : "");
+    }
+    try {
+      await fetch(`/api/history/${sid}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, messages: msgs })
+      });
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setMessages([]);
+    } else {
+      fetch(`/api/history/${activeSessionId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.messages) setMessages(data.messages);
+        })
+        .catch(() => setMessages([]));
+    }
+  }, [activeSessionId]);
+
 
   // Render markdown-like content: code blocks, bold, etc.
   const renderContent = (content: string) => {
@@ -91,15 +142,43 @@ export default function WorkbenchView({ callbacks }: Props) {
     if (!text || isRunning) return;
 
     const filePaths = uploadedFiles.map(f => f.path);
-    setMessages(prev => [...prev, {
-      role: "user",
+
+    // If user sends a follow-up with no new files, re-use the most recent
+    // uploaded file paths from the conversation history (persistent file context)
+    let effectiveFilePaths = filePaths;
+    if (effectiveFilePaths.length === 0) {
+      // Walk messages in reverse to find last user message with file paths
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role === "user" && msg.filePaths && msg.filePaths.length > 0) {
+          effectiveFilePaths = msg.filePaths;
+          break;
+        }
+        // Also allow re-using the most recent agent output file
+        if (msg.role === "ai" && msg.outputFilePaths && msg.outputFilePaths.length > 0) {
+          effectiveFilePaths = msg.outputFilePaths;
+          break;
+        }
+      }
+    }
+
+    const userMsg = {
+      role: "user" as const,
       content: text,
       files: uploadedFiles.map(f => f.name),
-    }]);
+      filePaths: effectiveFilePaths,
+    };
+    
+    setMessages(prev => {
+      const updated = [...prev, userMsg];
+      setTimeout(() => saveSession(updated), 0);
+      return updated;
+    });
     setInput("");
     setUploadedFiles([]);
 
-    await run(text, filePaths);
+    const chatHistory = messages.map(m => ({ role: m.role, content: m.content }));
+    await run(text, effectiveFilePaths, chatHistory);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

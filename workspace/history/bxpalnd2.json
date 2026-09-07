@@ -1,0 +1,13 @@
+{
+  "id": "bxpalnd2",
+  "title": "generate a pdf for application...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "generate a pdf for application of resignation",
+      "files": [],
+      "filePaths": []
+    }
+  ],
+  "updatedAt": "2026-09-07T17:14:12.781100Z"
+}

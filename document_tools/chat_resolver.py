@@ -39,7 +39,7 @@ class DocumentOperationIntent:
 
 def _parse_pages_param(q: str) -> Optional[str]:
     """Extract page specifications like '1, 3 and 5', 'page 4', 'pages 2-6'."""
-    m = re.search(r"\bpages?\s+([\d\s,and\-to]+)", q)
+    m = re.search(r"\bpages?\s+((?:\d+|\s+|,|and|to|-)+)", q)
     if m:
         raw = m.group(1).replace("and", ",").replace("to", "-").strip()
         tokens = [t.strip() for t in raw.split(",") if t.strip()]

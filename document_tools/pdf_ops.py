@@ -806,3 +806,23 @@ def add_visual_signature(
     out_bytes = doc.tobytes(garbage=4, deflate=True)
     doc.close()
     return out_bytes
+
+
+def text_to_pdf(text: str) -> bytes:
+    """Generate a PDF from a raw text string, automatically handling word wrapping."""
+    if not _PYMUPDF_AVAILABLE:
+        raise HTTPException(status_code=500, detail="PyMuPDF (fitz) is required to generate PDFs from text.")
+    
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842) # A4
+    rect = fitz.Rect(50, 50, 545, 792)
+    
+    # Clean up formatting for basic text display
+    clean_text = text.replace("```python", "").replace("```", "").strip()
+    
+    # insert_textbox handles word wrapping natively
+    page.insert_textbox(rect, clean_text, fontsize=12, fontname="helv", align=0)
+    
+    out_pdf = doc.write()
+    doc.close()
+    return out_pdf

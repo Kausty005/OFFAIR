@@ -150,6 +150,7 @@ class Agent:
         has_image: bool = False,
         has_pdf: bool = False,
         user_context: dict = None,
+        chat_history: list = None,
     ) -> AgentState:
         """
         Main entry point. Given a task and optional files, returns a completed AgentState.
@@ -168,6 +169,7 @@ class Agent:
             "user_query": task,
             "uploaded_files": uploaded_files,
             "user_context": user_context or {},
+            "chat_history": chat_history or [],
             "event_callback": event_cb,
         }
 
@@ -176,12 +178,13 @@ class Agent:
         except Exception as e:
             log("AGENT_GRAPH_ERROR", error=str(e))
             # Fallback to legacy step execution if graph fails unexpectedly
-            return self._legacy_run(task, uploaded_files, has_image, has_pdf, user_context)
+            return self._legacy_run(task, uploaded_files, has_image, has_pdf, user_context, chat_history)
 
         # Assemble backward-compatible AgentState
         state = AgentState()
         state.task = task
         state.uploaded_files = uploaded_files
+        state.chat_history = chat_history or []
         state.task_type = result.get("task_type", "general")
         state.selected_model = result.get("selected_model", "")
         state.routing_reason = result.get("model_reason", "")
@@ -210,6 +213,7 @@ class Agent:
         has_image: bool = False,
         has_pdf: bool = False,
         user_context: dict = None,
+        chat_history: list = None,
     ) -> AgentState:
         """Fallback execution method preserving the original procedural engine."""
         uploaded_files = uploaded_files or []
@@ -218,6 +222,7 @@ class Agent:
         state = AgentState()
         state.task = task
         state.uploaded_files = uploaded_files
+        state.chat_history = chat_history or []
         if user_context:
             state.tool_results["user_context"] = user_context
         state.task_type = decision.task_type
@@ -677,7 +682,12 @@ Be concise and professional."""
             "base your answer on it. Be factual and concise."
         )
 
-        prompt_parts = [state.task]
+        prompt_parts = []
+        if getattr(state, "chat_history", None):
+            hist_str = "\n".join([f"{msg.get('role', 'user').upper()}: {msg.get('content', '')}" for msg in state.chat_history[-10:]])
+            prompt_parts.append(f"--- CHAT HISTORY ---\n{hist_str}")
+        
+        prompt_parts.append(f"--- LATEST USER QUERY ---\n{state.task}")
         if file_context:
             prompt_parts.append(f"\n\n--- FILE CONTENT ---\n{file_context[:4000]}")
         if rag_context:
