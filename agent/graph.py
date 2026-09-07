@@ -874,25 +874,10 @@ def node_execute_report(state: AgentStateDict) -> AgentStateDict:
         report_content = ""
 
     if not report_content or len(report_content.strip()) < 50:
-        report_content = (
-            f"# {doc_title}\n\n"
-            f"*OffAir AI | Air-Gapped Sovereign Document*\n\n"
-            f"## 1. Executive Summary\n\n"
-            f"This document provides the standard technical framework, procedures, and operational guidelines for {clean_title}.\n\n"
-            f"## 2. Technical Specifications & Guidelines\n\n"
-            f"- Compliance with standard industrial operating protocols\n"
-            f"- Regular verification of operational parameters and tolerance thresholds\n"
-            f"- Mandatory routine safety inspections and logging\n\n"
-            f"## 3. Maintenance & Safety Directives\n\n"
-            f"- All personnel must adhere to authorized sovereign safety procedures\n"
-            f"- Critical anomalies must be documented and escalated immediately\n"
-            f"- Maintenance cycles must follow OEM and facility engineering standards\n\n"
-            f"## 4. Recommendations & Sign-Off\n\n"
-            f"Scheduled preventative maintenance is approved and recommended."
-        )
+        report_content = f"# {doc_title}\n\n{query}"
 
-    safe_title = re.sub(r"[^\w\-]", "_", doc_title[:35]).strip("_") or "Document"
-    filename = f"{safe_title}.docx"
+    safe_title = re.sub(r"[^\w\-]", "_", (clean_title or "Report")[:30]).strip("_") or "Report"
+    filename = f"{safe_title}_Approval_Note.docx"
     out_path = get_output_path(filename)
 
     docx_res = create_document_from_markdown(
