@@ -1131,7 +1131,8 @@ def node_execute_multi_step(state: AgentStateDict) -> AgentStateDict:
                 tool_results["calculations"] = calc_res
         elif tool == "docx_generator":
             clean_t = re.sub(r"(?i)\b(?:make|generate|create|write)\s+(?:a\s+)?(?:word\s+document|docx|report)\b", "", query).strip() or "Technical Report"
-            out_path = get_output_path(f"{re.sub(r'[^\w\-]', '_', clean_t[:30])}.docx")
+            clean_safe = re.sub(r"[^\w\-]", "_", clean_t[:30])
+            out_path = get_output_path(f"{clean_safe}.docx")
             doc_res = create_document_from_markdown(
                 f"# {clean_t.title()}\n\n"
                 f"## Executive Summary\nAnalysis generated for: {query}\n\n"
@@ -1306,8 +1307,6 @@ def route_by_task(state: AgentStateDict) -> str:
 
     if t == TaskType.CALCULATION:
         return "execute_calculation"
-    if t == TaskType.REPORT_GENERATION:
-        return "execute_report_generation"
     if t == TaskType.DOCUMENT_GENERATION:
         return "execute_document_generation"
     elif t == TaskType.CODE_GENERATION:
@@ -1337,7 +1336,6 @@ def build_agent_graph():
 
     workflow.add_node("analyze_and_plan", node_analyze_and_plan)
     workflow.add_node("execute_calculation", node_execute_calculation)
-    workflow.add_node("execute_report_generation", node_execute_report_generation)
     workflow.add_node("execute_document_generation", node_execute_document_generation)
     workflow.add_node("execute_code_generation", node_execute_code_generation)
     workflow.add_node("execute_code_execution", node_execute_code_execution)
@@ -1363,7 +1361,6 @@ def build_agent_graph():
             "execute_code_execution": "execute_code_execution",
             "execute_knowledge_query": "execute_knowledge_query",
             "execute_vision_analysis": "execute_vision_analysis",
-            "execute_report_generation": "execute_report_generation",
             "execute_document_generation": "execute_document_generation",
             "execute_presentation": "execute_presentation",
             "execute_report": "execute_report",
@@ -1376,7 +1373,6 @@ def build_agent_graph():
     )
 
     workflow.add_edge("execute_calculation", "verify")
-    workflow.add_edge("execute_report_generation", "verify")
     workflow.add_edge("execute_document_generation", "verify")
     workflow.add_edge("execute_code_generation", "verify")
     workflow.add_edge("execute_code_execution", "verify")

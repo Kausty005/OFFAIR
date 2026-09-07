@@ -20,11 +20,15 @@ try:
     from pptx.util import Inches, Pt, Emu
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
-    from pptx.util import Inches, Pt
     _PPTX_AVAILABLE = True
 except ImportError:
     _PPTX_AVAILABLE = False
     RGBColor = None
+    class _PP_ALIGN_FALLBACK:
+        LEFT = 1
+        CENTER = 2
+        RIGHT = 3
+    PP_ALIGN = _PP_ALIGN_FALLBACK
 
 
 # ── Design constants ──────────────────────────────────────────────────────────
