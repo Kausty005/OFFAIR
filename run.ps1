@@ -25,7 +25,7 @@ try {
 # Start FastAPI backend
 Write-Host ""
 Write-Host "[2/3] Starting FastAPI backend on :8000..." -ForegroundColor Yellow
-$backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload" `
+$backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000" `
     -WorkingDirectory $PSScriptRoot -PassThru -WindowStyle Normal
 Write-Host "      [OK] Backend starting (PID $($backend.Id))" -ForegroundColor Green
 Start-Sleep -Seconds 2
@@ -33,10 +33,14 @@ Start-Sleep -Seconds 2
 # Start Next.js frontend
 Write-Host ""
 Write-Host "[3/3] Starting Next.js frontend on :5000..." -ForegroundColor Yellow
-$npmCmd = if ($IsWindows) { "npm.cmd" } else { "npm" }
-$frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev", "--", "-p", "5000" `
+$npmCmd = if ($env:OS -eq "Windows_NT") { "npm.cmd" } else { "npm" }
+$frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev" `
     -WorkingDirectory (Join-Path $PSScriptRoot "frontend") -PassThru -WindowStyle Normal
-Write-Host "      [OK] Frontend starting (PID $($frontend.Id))" -ForegroundColor Green
+if ($frontend) {
+    Write-Host "      [OK] Frontend starting (PID $($frontend.Id))" -ForegroundColor Green
+} else {
+    Write-Host "      [ERR] Frontend failed to start" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "-----------------------------------------------------" -ForegroundColor Gray

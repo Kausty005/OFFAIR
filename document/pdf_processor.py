@@ -51,6 +51,24 @@ def extract_pages_digital(pdf_path: str | Path) -> list[dict]:
     Returns list of: {page_num, text, is_scanned}
     """
     pages = []
+    try:
+        import fitz
+        with fitz.open(str(pdf_path)) as document:
+            for index, page in enumerate(document):
+                text = page.get_text("text") or ""
+                pages.append({
+                    "page_num": index + 1,
+                    "text": text,
+                    "is_scanned": is_scanned_page(text),
+                    "char_count": len(text),
+                })
+        log("PDF_PARSED", path=str(pdf_path), pages=len(pages), method="pymupdf")
+        return pages
+    except ImportError:
+        pass
+    except Exception as e:
+        log("PDF_ERROR", path=str(pdf_path), error=str(e), method="pymupdf")
+
     if not _PYPDF2_AVAILABLE:
         return pages
 

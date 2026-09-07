@@ -1,0 +1,56 @@
+
+PLANT SAFETY MANUAL - SECTION 7: ROTATING EQUIPMENT
+=====================================================
+
+[FICTIONAL/DEMO DOCUMENT]
+
+Document: HSE-MAN-007 (FICTIONAL)
+Revision: 2
+Date: 2024-03-01
+
+7.1 ROTATING EQUIPMENT HAZARDS
+--------------------------------
+Key hazards associated with pumps and rotating equipment:
+a) Entanglement in rotating parts
+b) High pressure fluid release
+c) High temperature surfaces
+d) Electrical hazards
+e) Hydrocarbon release and fire risk
+f) Noise-induced hearing loss
+
+7.2 EQUIPMENT OPERATING LIMITS
+--------------------------------
+Temperature Alarms:
+- High temperature alarm (TA-High): 85 degrees Celsius
+- High-high temperature alarm (TA-HH): 95 degrees Celsius
+- Automatic trip on high-high alarm
+
+Vibration Alarms:
+- High vibration alarm (VA-High): 7.0 mm/s
+- High-high vibration alarm (VA-HH): 11.0 mm/s
+- Automatic trip on high-high alarm
+
+Pressure Monitoring:
+- Suction pressure low (PA-Low): 0.5 bar
+- Discharge pressure high (PA-High): 20 bar
+
+7.3 EMERGENCY PROCEDURES
+--------------------------
+Pump Failure Emergency Response:
+1. Immediately activate standby pump (if available)
+2. Notify control room operator
+3. Isolate failed pump using emergency isolation valves
+4. Initiate shutdown procedure per SOP-MECH-042
+5. Assess for any fluid release and contain if necessary
+6. Notify section head and safety officer
+7. Complete incident report within 2 hours
+
+7.4 PERMIT-TO-WORK
+-------------------
+Required for all maintenance activities:
+- Hot Work Permit for welding, grinding, cutting
+- Confined Space Entry Permit for enclosed vessels
+- Electrical Isolation Permit for electrical work
+- General Work Permit for mechanical maintenance
+
+[THIS IS FICTIONAL DEMO DATA - FOR DEMONSTRATION ONLY]

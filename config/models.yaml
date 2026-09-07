@@ -7,8 +7,8 @@ models:
 
   general:
     provider: ollama
-    name: qwen3:4b
-    description: "General reasoning and document understanding (Qwen3 4B)"
+    name: phi3:latest
+    description: "General reasoning and document understanding (Phi-3)"
     context_length: 8192
     vram_mb: 3000
     task_types:
@@ -22,7 +22,7 @@ models:
     provider: ollama
     name: qwen2.5-coder:3b
     description: "Specialized code generation and debugging (Qwen2.5-Coder 3B)"
-    fallback: qwen3:4b
+    fallback: phi3:latest
     context_length: 8192
     vram_mb: 2000
     task_types:

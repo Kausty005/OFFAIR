@@ -15,6 +15,7 @@ from rag.vector_store import (
 )
 from rag.ingest import _chunk_text, _doc_id, ingest_text
 from rag.retriever import retrieve, get_kb_status
+from security.permissions import User
 from tools.search import search_knowledge_base
 
 
@@ -49,6 +50,35 @@ def test_doc_id_deterministic():
 
 def test_vector_store_lifecycle():
     # Reset collection first
+    delete_collection()
+
+
+def test_vector_search_filters_roles_before_scoring():
+    delete_collection()
+    ok = add_documents(
+        ["hr", "finance"],
+        [[1.0, 0.0], [0.0, 1.0]],
+        ["Leave policy", "Company revenue"],
+        [
+            {"source": "hr.pdf", "allowed_roles": ["employee"]},
+            {"source": "finance.pdf", "allowed_roles": ["finance"]},
+        ],
+    )
+    assert ok is True
+
+    employee_results = search(
+        [0.0, 1.0],
+        user=User("bob", "employee"),
+        authorized_only=True,
+    )
+    finance_results = search(
+        [0.0, 1.0],
+        user=User("charlie", "finance"),
+        authorized_only=True,
+    )
+
+    assert employee_results == []
+    assert finance_results[0]["id"] == "finance"
     delete_collection()
 
     # Add mock documents

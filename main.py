@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Any
 
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -143,6 +143,16 @@ async def run_agent_endpoint(
     except Exception:
         u_context = {}
 
+    if u_context.get("session_token"):
+        from security.auth import user_from_token
+        try:
+            authenticated = user_from_token(u_context["session_token"])
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"MongoDB unavailable: {exc}") from exc
+        if not authenticated:
+            raise HTTPException(status_code=401, detail="Valid login session required")
+        u_context = authenticated
+
     task_id = os.urandom(8).hex()
     queue: asyncio.Queue = asyncio.Queue()
     task_queues[task_id] = queue
@@ -265,6 +275,11 @@ async def get_models():
 async def get_status():
     """System health check."""
     ollama_up = ollama_client.ping()
+    ollama_models = []
+    try:
+        ollama_models = [m.get("name", "") for m in ollama_client.list_models()]
+    except Exception:
+        pass
 
     # Check docker
     import subprocess
@@ -288,6 +303,7 @@ async def get_status():
 
     return {
         "ollama": ollama_up,
+        "ollama_models": ollama_models,
         "docker": docker_up,
         "ocr": ocr_up,
         "knowledge_base": len(kb_docs),
@@ -490,27 +506,131 @@ async def generate_pptx_post(req: Optional[GeneratePPTXRequest] = None):
 class RAGSearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
+    user_id: Optional[str] = None
+    role: Optional[str] = None
+    session_token: Optional[str] = None
 
 class RAGAskRequest(BaseModel):
     query: str
     model: Optional[str] = None
     top_k: Optional[int] = 5
+    user_id: Optional[str] = None
+    role: Optional[str] = None
+    session_token: Optional[str] = None
+
+
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+    role: str
+    details: Optional[dict[str, Any]] = None
+
+
+def _authenticated_user(token: Optional[str]) -> dict[str, str]:
+    from security.auth import user_from_token
+    try:
+        user = user_from_token(token or "")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"MongoDB unavailable: {exc}") from exc
+    if not user:
+        raise HTTPException(status_code=401, detail="Valid login session required")
+    return user
+
+
+@app.post("/api/auth/register")
+async def register(req: AuthRequest):
+    from security.auth import register_user
+    try:
+        return register_user(req.username, req.password, req.role, req.details or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"MongoDB unavailable: {exc}") from exc
+
+
+@app.post("/api/auth/login")
+async def login(req: AuthRequest):
+    from security.auth import login_user
+    try:
+        return login_user(req.username, req.password, req.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"MongoDB unavailable: {exc}") from exc
+
+
+@app.post("/api/auth/logout")
+async def logout(authorization: Optional[str] = Header(None)):
+    from security.auth import logout_user
+    token = (authorization or "").removeprefix("Bearer ")
+    logout_user(token)
+    return {"logged_out": True}
+
+
+@app.get("/api/auth/status")
+async def auth_status():
+    """Report local MongoDB availability for login diagnostics."""
+    from security.auth import MONGODB_DATABASE, MONGODB_URI, _database
+    try:
+        _database().command("ping")
+        return {"connected": True, "database": MONGODB_DATABASE, "uri": MONGODB_URI}
+    except Exception as exc:
+        return {"connected": False, "database": MONGODB_DATABASE, "uri": MONGODB_URI, "error": str(exc)}
+
+
+@app.get("/api/knowledge/diagnostics")
+async def knowledge_diagnostics(session_token: str):
+    """Show whether authorized local retrieval is returning real indexed chunks."""
+    from rag.vector_store import get_collection_stats
+    from rag.retriever import retrieve
+    from security.permissions import User
+    authenticated = _authenticated_user(session_token)
+    user = User(authenticated["username"], authenticated["role"])
+    results = retrieve("maintenance vibration safety", top_k=3, user=user, authorized_only=True)
+    return {
+        "rag_local": True,
+        "vector_store": get_collection_stats(),
+        "user": authenticated,
+        "authorized_results": len(results),
+        "sources": [{"document": r.get("document"), "page": r.get("page"), "score": r.get("rerank_score", r.get("score"))} for r in results],
+    }
 
 
 @app.get("/api/knowledge")
 async def list_knowledge():
-    """List documents in the knowledge base along with vector store statistics."""
-    from rag.vector_store import get_collection_stats
+    """List documents in the knowledge base along with vector store statistics and provenance metadata."""
+    from rag.vector_store import get_collection_stats, _load_store
     kb_path = Path("knowledge_base")
+    store = _load_store()
+    doc_meta_map = {}
+    for meta in store.get("metadatas", []):
+        src = meta.get("source")
+        if src and src not in doc_meta_map:
+            doc_meta_map[src] = {
+                "uploaded_by": meta.get("uploaded_by", "system"),
+                "uploaded_at": meta.get("uploaded_at", ""),
+                "allowed_roles": meta.get("allowed_roles", ["admin", "engineer", "employee"]),
+                "min_role_level": meta.get("min_role_level", 10),
+                "classification": meta.get("classification", "internal"),
+                "department": meta.get("department", ""),
+            }
+
     docs = []
     if kb_path.exists():
         for p in kb_path.iterdir():
             if p.suffix.lower() in (".pdf", ".txt", ".docx", ".md", ".csv", ".json"):
+                m = doc_meta_map.get(p.name, {})
                 docs.append({
                     "name": p.name,
                     "size": p.stat().st_size,
                     "path": str(p),
                     "ext": p.suffix.lower().replace(".", ""),
+                    "uploaded_by": m.get("uploaded_by", "admin"),
+                    "uploaded_at": m.get("uploaded_at", ""),
+                    "allowed_roles": m.get("allowed_roles", ["admin", "engineer", "employee"]),
+                    "min_role_level": m.get("min_role_level", 10),
+                    "classification": m.get("classification", "internal"),
+                    "department": m.get("department", ""),
                 })
     stats = get_collection_stats()
     return {
@@ -528,8 +648,15 @@ async def knowledge_status():
 
 
 @app.post("/api/knowledge/upload")
-async def upload_knowledge(file: UploadFile = File(...), auto_ingest: bool = Form(False)):
-    """Upload a document to the knowledge base, optionally auto-ingesting."""
+async def upload_knowledge(
+    file: UploadFile = File(...),
+    auto_ingest: bool = Form(False),
+    department: str = Form(""),
+    classification: str = Form("internal"),
+    allowed_roles: str = Form(""),
+    session_token: Optional[str] = Form(None),
+):
+    """Upload a document to the knowledge base, optionally auto-ingesting with provenance tracking."""
     kb_path = Path("knowledge_base")
     kb_path.mkdir(exist_ok=True)
     safe_name = Path(file.filename).name
@@ -540,7 +667,43 @@ async def upload_knowledge(file: UploadFile = File(...), auto_ingest: bool = For
     ingest_result = None
     if auto_ingest:
         from rag.ingest import ingest_file
-        ingest_result = ingest_file(dest)
+        from security.permissions import access_metadata, normalize_role
+
+        authenticated = None
+        if session_token:
+            try:
+                authenticated = _authenticated_user(session_token)
+            except Exception:
+                pass
+
+        uploader_name = authenticated["username"] if authenticated else "admin"
+        uploader_role = authenticated["role"] if authenticated else "admin"
+
+        dept_str = str(department.default if hasattr(department, "default") else department or "").strip()
+        class_str = str(classification.default if hasattr(classification, "default") else classification or "internal").strip()
+        roles_str = str(allowed_roles.default if hasattr(allowed_roles, "default") else allowed_roles or "").strip()
+
+        # Determine roles based on input or hierarchy
+        raw_roles = [normalize_role(role.strip()) for role in roles_str.split(",") if role.strip()]
+        if not raw_roles:
+            if uploader_role == "admin":
+                raw_roles = ["admin", "engineer", "employee"]
+            elif uploader_role in ("engineer", "eng"):
+                raw_roles = ["admin", "engineer"]
+            else:
+                raw_roles = ["admin", "employee"]
+
+        sec_meta = access_metadata(
+            department=dept_str,
+            classification=class_str,
+            allowed_roles=raw_roles,
+            uploaded_by=uploader_name,
+        )
+
+        ingest_result = ingest_file(
+            dest,
+            security_metadata=sec_meta,
+        )
 
     return {
         "filename": safe_name,
@@ -552,14 +715,34 @@ async def upload_knowledge(file: UploadFile = File(...), auto_ingest: bool = For
 
 
 @app.post("/api/knowledge/ingest")
-async def ingest_knowledge(background_tasks: BackgroundTasks):
+async def ingest_knowledge(
+    background_tasks: BackgroundTasks,
+    department: str = Form(""),
+    classification: str = Form("internal"),
+    allowed_roles: str = Form(""),
+    session_token: Optional[str] = Form(None),
+):
     """Ingest all documents in knowledge_base/ into ChromaDB / pure-Python store."""
     def do_ingest():
         try:
             from rag.ingest import ingest_directory
             kb_path = Path("knowledge_base")
             kb_path.mkdir(exist_ok=True)
-            result = ingest_directory(str(kb_path))
+            authenticated = _authenticated_user(session_token)
+            if authenticated["role"] != "admin":
+                raise HTTPException(status_code=403, detail="Only admins may bulk-index the knowledge base")
+            roles = [role.strip() for role in allowed_roles.split(",") if role.strip()]
+            if not roles:
+                roles = [authenticated["role"]]
+            result = ingest_directory(
+                str(kb_path),
+                security_metadata={
+                    "department": department.strip(),
+                    "classification": classification.strip(),
+                    "allowed_roles": roles,
+                    "uploaded_by": authenticated["username"],
+                },
+            )
             log("KB_INGEST", result=result)
             return result
         except Exception as e:
@@ -573,9 +756,17 @@ async def ingest_knowledge(background_tasks: BackgroundTasks):
 async def search_knowledge(req: RAGSearchRequest):
     """Semantic search against the local knowledge base."""
     from rag.retriever import retrieve
+    from security.permissions import User
     if not req.query.strip():
         return {"query": "", "results": [], "count": 0}
-    results = retrieve(req.query, top_k=req.top_k or 5)
+    authenticated = _authenticated_user(req.session_token)
+    user = User(authenticated["username"], authenticated["role"])
+    results = retrieve(
+        req.query,
+        top_k=req.top_k or 5,
+        user=user,
+        authorized_only=True,
+    )
     return {
         "query": req.query,
         "results": results,
@@ -588,9 +779,18 @@ async def search_knowledge(req: RAGSearchRequest):
 async def ask_knowledge(req: RAGAskRequest):
     """Ask a question and receive a grounded answer with source citations."""
     from rag.retriever import answer_with_rag
+    from security.permissions import User
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    return answer_with_rag(req.query, top_k=req.top_k or 5, model=req.model)
+    authenticated = _authenticated_user(req.session_token)
+    user = User(authenticated["username"], authenticated["role"])
+    return answer_with_rag(
+        req.query,
+        top_k=req.top_k or 5,
+        model=req.model,
+        user=user,
+        authorized_only=True,
+    )
 
 
 @app.post("/api/knowledge/reset")

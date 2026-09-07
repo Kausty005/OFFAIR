@@ -39,6 +39,13 @@ export function useAgent(callbacks?: Partial<AgentCallbacks>) {
       const form = new FormData();
       form.append("task", task);
       form.append("files", JSON.stringify(filePaths));
+      const session = localStorage.getItem("offair_session");
+      if (session) {
+        try {
+          const user = JSON.parse(session);
+          form.append("user_context", JSON.stringify({ session_token: user.token }));
+        } catch {}
+      }
 
       const resp = await fetch(`${API}/api/run`, { method: "POST", body: form });
       if (!resp.ok) {

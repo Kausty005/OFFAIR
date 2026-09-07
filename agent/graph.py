@@ -347,6 +347,14 @@ def node_execute_knowledge_query(state: AgentStateDict) -> AgentStateDict:
 
     chunks = retrieve_context(query=query, user_context=user_context, top_k=3)
 
+    if not chunks:
+        answer = "I couldn't find this information in the authorized knowledge base."
+        _emit_event(state, "RAG_ABSTAINED", {"query": query[:100], "reason": "no_authorized_context"})
+        return {
+            "retrieved_context": [],
+            "generated_response": answer,
+        }
+
     sources = []
     context_parts = []
     for i, c in enumerate(chunks):
@@ -383,7 +391,7 @@ def node_execute_knowledge_query(state: AgentStateDict) -> AgentStateDict:
 # ─── Node 6: Document Analysis & Deliverable Generation ───────────────────────
 
 def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
-    """Process uploaded PDF/DOCX, perform local OCR, extract findings, and generate Word deliverable."""
+    """Extract uploaded documents, using industrial analysis only when requested."""
     files = state.get("uploaded_files", [])
     query = state.get("user_query", "")
     model = state.get("selected_model") or get_available_model("general") or "llama3.1:8b"
@@ -397,12 +405,103 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
     pdf_files = [f for f in files if f.lower().endswith(".pdf")]
     for pdf_p in pdf_files:
         p_res = process_pdf(pdf_p)
-        raw_text += "\n" + p_res.get("text", "")
+        raw_text += "\n" + p_res.get("full_text", "")
         # Run OCR if scanned
-        if p_res.get("is_scanned") and p_res.get("scanned_pages"):
-            _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "ocr", "pages": len(p_res.get("scanned_pages"))})
-            ocr_text = ocr_pdf_pages(pdf_p, p_res.get("scanned_pages"))
-            raw_text += "\n" + ocr_text
+        if p_res.get("needs_ocr"):
+            pages = p_res.get("pages", [])
+            _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "ocr", "pages": len(pages)})
+            ocr_pages = ocr_pdf_pages(pages)
+            raw_text += "\n" + "\n".join(page.get("ocr_text", "") for page in ocr_pages)
+
+    for file_path in files:
+        if file_path.lower().endswith((".txt", ".md")):
+            raw_text += "\n" + Path(file_path).read_text(encoding="utf-8", errors="replace")
+        elif file_path.lower().endswith(".docx"):
+            try:
+                from docx import Document
+                document = Document(file_path)
+                raw_text += "\n" + "\n".join(p.text for p in document.paragraphs if p.text.strip())
+            except Exception as exc:
+                raw_text += f"\n[DOCX extraction failed: {exc}]"
+
+    if files and not raw_text.strip():
+        _emit_event(state, "DOCUMENT_REJECTED", {"reason": "DOCUMENT_EXTRACTION_FAILED"})
+        return {
+            "tool_results": {"raw_text": "", "document_type": "unextractable", "rag_used": False},
+            "retrieved_context": [],
+            "output_files": output_files,
+            "generated_response": "No information available: the uploaded document could not be extracted, including OCR.",
+        }
+
+    inspection_terms = (
+        "inspection", "maintenance", "pump", "equipment", "bearing", "vibration",
+        "mechanical seal", "operating temperature", "sop", "leakage",
+    )
+    is_inspection = any(term in f"{query}\n{raw_text[:6000]}".lower() for term in inspection_terms)
+
+    user_context = state.get("user_context")
+    retrieval_query = query
+    if query.strip().lower() in {"analyse document", "analyze document", "summarize document"}:
+        retrieval_query = raw_text[:3000]
+    related_context = retrieve_context(
+        retrieval_query,
+        user_context=user_context,
+        top_k=5,
+    )
+    relevant_context = [
+        chunk for chunk in related_context
+        if chunk.get("rerank_score", chunk.get("score", 0)) >= 0.45
+    ]
+    if not relevant_context:
+        reason = "NO_RELEVANT_AUTHORIZED_SOURCE"
+        if user_context and not user_context.get("role"):
+            reason = "ROLE_NOT_AUTHENTICATED"
+        _emit_event(state, "RAG_ABSTAINED", {
+            "reason": reason,
+            "query": retrieval_query[:120],
+        })
+        return {
+            "tool_results": {
+                "raw_text": raw_text,
+                "document_type": "unmatched",
+                "rag_used": False,
+            },
+            "retrieved_context": [],
+            "output_files": output_files,
+            "generated_response": (
+                "No information available: your role is not authorized for a related source."
+                if reason == "ROLE_NOT_AUTHENTICATED"
+                else "No information available: no related authorized source was found in the knowledge base."
+            ),
+        }
+
+    if not is_inspection:
+        summary_prompt = (
+            "Answer using only the uploaded document and the related authorized knowledge-base context. "
+            "If the context does not support an answer, say no information is available. Do not invent facts.\n\n"
+            f"UPLOADED DOCUMENT:\n{raw_text[:8000]}\n\n"
+            f"AUTHORIZED KNOWLEDGE CONTEXT:\n{chr(10).join(c.get('text', '') for c in relevant_context)}"
+        )
+        summary = ollama.generate(model=model, prompt=summary_prompt, temperature=0.1) if model else ""
+        if not summary.strip():
+            source_lines = []
+            for index, chunk in enumerate(relevant_context[:3], start=1):
+                source = chunk.get("document", "document")
+                page = chunk.get("page", "")
+                excerpt = " ".join(chunk.get("text", "").split())[:500]
+                source_lines.append(f"[Source {index}] {source}"
+                                    f"{f' (Page {page})' if page else ''}: {excerpt}")
+            summary = (
+                "Related authorized knowledge-base content found. "
+                "Ollama is unavailable, so returning retrieved source evidence without generation.\n\n"
+                + "\n\n".join(source_lines)
+            )
+        return {
+            "tool_results": {"raw_text": raw_text, "document_type": "general"},
+            "retrieved_context": relevant_context,
+            "output_files": output_files,
+            "generated_response": summary or "No information available: Ollama did not return a grounded answer.",
+        }
 
     img_files = [f for f in files if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp"))]
     for img_p in img_files:
@@ -423,7 +522,7 @@ def node_execute_document_analysis(state: AgentStateDict) -> AgentStateDict:
         extracted_data = {"equipment_name": "Equipment Inspection", "findings": ["General inspection completed"]}
 
     # Search SOPs
-    sops = retrieve_context("maintenance procedure standards safety", top_k=3)
+    sops = relevant_context
 
     # Generate Word Document if requested
     equip_id = extracted_data.get("equipment_id") or "EQUIP-001"
@@ -483,6 +582,33 @@ def node_execute_vision_analysis(state: AgentStateDict) -> AgentStateDict:
         }
 
     target_img = img_files[0]
+    user_context = state.get("user_context")
+    ocr_probe = ""
+    try:
+        from document.ocr import ocr_image_file
+        ocr_probe = ocr_image_file(target_img)
+    except Exception:
+        pass
+    related_context = retrieve_context(
+        f"{query}\n{ocr_probe[:1200]}",
+        user_context=user_context,
+        top_k=5,
+    )
+    relevant_context = [
+        chunk for chunk in related_context
+        if chunk.get("rerank_score", chunk.get("score", 0)) >= 0.45
+    ]
+    if not relevant_context:
+        _emit_event(state, "VISION_REJECTED", {
+            "reason": "NO_RELEVANT_AUTHORIZED_SOURCE",
+            "file": Path(target_img).name,
+        })
+        return {
+            "generated_response": (
+                "No information available: this image has no related authorized source "
+                "in the knowledge base, so vision analysis was not performed."
+            ),
+        }
     _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "vision", "model": model, "file": Path(target_img).name})
 
     res = analyze_image_file(target_img, prompt=query, model=model)
@@ -648,6 +774,13 @@ def node_execute_multi_step(state: AgentStateDict) -> AgentStateDict:
     retrieved = []
     extracted = {}
     calc_res = None
+
+    industrial_terms = (
+        "inspection", "maintenance", "pump", "equipment", "bearing", "vibration",
+        "mechanical seal", "operating temperature", "sop", "leakage",
+    )
+    if state.get("uploaded_files") and not any(term in query.lower() for term in industrial_terms):
+        return node_execute_document_analysis(state)
 
     for step in plan:
         tool = step.get("tool", "")
