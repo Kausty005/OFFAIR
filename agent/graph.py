@@ -881,12 +881,107 @@ def node_format_final_response(state: AgentStateDict) -> AgentStateDict:
 
 # ─── Conditional Branch Router ────────────────────────────────────────────────
 
+# ─── Node 2b: Document Operations (Deterministic Tools) ──────────────────────
+
+def node_execute_document_operation(state: AgentStateDict) -> AgentStateDict:
+    """Execute deterministic document tool (or pipeline) locally without LLM inference."""
+    from document_tools.chat_resolver import resolve_explicit_document_operation
+    from document_tools.agent_adapter import execute_document_tool
+
+    query = state.get("user_query", "")
+    files = list(state.get("uploaded_files") or [])
+    output_files = list(state.get("output_files") or [])
+    tool_results = dict(state.get("tool_results") or {})
+
+    intent = resolve_explicit_document_operation(query, files)
+    tool_name = intent.tool_name if intent else "merge_pdf"
+    params = intent.params if intent else {}
+    is_compound = intent.is_compound if intent else False
+    pipeline = intent.pipeline if intent else []
+
+    _emit_event(state, "TOOL_EXECUTION_STARTED", {
+        "tool": tool_name,
+        "is_compound": is_compound,
+        "query": query[:80],
+    })
+
+    if is_compound and pipeline:
+        current_files = list(files)
+        final_msg = ""
+        for idx, step in enumerate(pipeline):
+            _emit_step(state, step.description, "running", tool=step.tool_name)
+            res = execute_document_tool(
+                tool_name=step.tool_name,
+                params=step.params,
+                uploaded_files=current_files,
+                query=query,
+            )
+            if not res.success:
+                _emit_step(state, step.description, "failed", result=res.message, tool=step.tool_name)
+                _emit_event(state, "TOOL_EXECUTION_FAILED", {"tool": step.tool_name, "error": res.message})
+                return {
+                    "generated_response": res.message,
+                    "execution_status": "failed",
+                    "output_files": output_files,
+                }
+            _emit_step(state, step.description, "done", result="Success", tool=step.tool_name)
+            if res.output_files:
+                current_files = list(res.output_files)
+                for f in res.output_files:
+                    if f not in output_files:
+                        output_files.append(f)
+            final_msg = res.message
+
+        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": "pipeline", "status": "success"})
+        return {
+            "output_files": output_files,
+            "generated_response": final_msg,
+            "tool_results": {"pipeline": [s.tool_name for s in pipeline]},
+            "execution_status": "completed",
+        }
+    else:
+        desc = intent.description if intent else f"Execute {tool_name}"
+        _emit_step(state, desc, "running", tool=tool_name)
+        res = execute_document_tool(
+            tool_name=tool_name,
+            params=params,
+            uploaded_files=files,
+            query=query,
+        )
+
+        if not res.success:
+            _emit_step(state, desc, "failed", result=res.message, tool=tool_name)
+            _emit_event(state, "TOOL_EXECUTION_FAILED", {"tool": tool_name, "error": res.message})
+            return {
+                "generated_response": res.message,
+                "execution_status": "failed",
+                "output_files": output_files,
+            }
+
+        _emit_step(state, desc, "done", result="Success", tool=tool_name)
+        if res.output_files:
+            for f in res.output_files:
+                if f not in output_files:
+                    output_files.append(f)
+
+        _emit_event(state, "TOOL_EXECUTION_COMPLETED", {"tool": tool_name, "status": "success"})
+        return {
+            "output_files": output_files,
+            "generated_response": res.message,
+            "tool_results": {tool_name: res.details},
+            "execution_status": "completed",
+        }
+
+
 def route_by_task(state: AgentStateDict) -> str:
     """Select the execution branch according to classified task."""
+    t = state.get("task_type")
+    if t == TaskType.DOCUMENT_OPERATION:
+        return "execute_document_operation"
+
     if state.get("is_multi_step"):
         return "execute_multi_step"
 
-    t = state.get("task_type")
     if t == TaskType.CALCULATION:
         return "execute_calculation"
     elif t == TaskType.CODE_GENERATION:
@@ -918,6 +1013,7 @@ def build_agent_graph():
     workflow.add_node("execute_vision_analysis", node_execute_vision_analysis)
     workflow.add_node("execute_presentation", node_execute_presentation)
     workflow.add_node("execute_document_analysis", node_execute_document_analysis)
+    workflow.add_node("execute_document_operation", node_execute_document_operation)
     workflow.add_node("execute_general_chat", node_execute_general_chat)
     workflow.add_node("execute_multi_step", node_execute_multi_step)
     workflow.add_node("verify", node_verify)
@@ -935,6 +1031,7 @@ def build_agent_graph():
             "execute_vision_analysis": "execute_vision_analysis",
             "execute_presentation": "execute_presentation",
             "execute_document_analysis": "execute_document_analysis",
+            "execute_document_operation": "execute_document_operation",
             "execute_general_chat": "execute_general_chat",
             "execute_multi_step": "execute_multi_step",
         },
@@ -947,6 +1044,7 @@ def build_agent_graph():
     workflow.add_edge("execute_vision_analysis", "verify")
     workflow.add_edge("execute_presentation", "verify")
     workflow.add_edge("execute_document_analysis", "verify")
+    workflow.add_edge("execute_document_operation", "verify")
     workflow.add_edge("execute_general_chat", "verify")
     workflow.add_edge("execute_multi_step", "verify")
 

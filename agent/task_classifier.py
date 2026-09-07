@@ -17,6 +17,7 @@ class TaskType:
     GENERAL_CHAT = "general_chat"
     KNOWLEDGE_QUERY = "knowledge_query"
     DOCUMENT_ANALYSIS = "document_analysis"
+    DOCUMENT_OPERATION = "document_operation"
     CODE_GENERATION = "code_generation"
     CODE_EXECUTION = "code_execution"
     CALCULATION = "calculation"
@@ -149,8 +150,50 @@ def classify_task(
     if not has_docx:
         has_docx = any(f.lower().endswith((".docx", ".doc")) for f in files)
 
-    # 1. Vision Analysis check
-    if has_image or any(re.search(p, q_lower) for p in _VISION_PATTERNS):
+    from document_tools.chat_resolver import resolve_explicit_document_operation, is_explicit_vision_request
+
+    # 1. Deterministic Document Operations (Highest Priority)
+    doc_op = resolve_explicit_document_operation(query=q, uploaded_files=files)
+    if doc_op:
+        steps = []
+        if doc_op.is_compound and doc_op.pipeline:
+            for idx, p_step in enumerate(doc_op.pipeline):
+                steps.append(PlannedStep(
+                    step_id=idx + 1,
+                    task_type=TaskType.DOCUMENT_OPERATION,
+                    description=p_step.description,
+                    tool=p_step.tool_name,
+                ))
+            return ClassificationResult(
+                primary_task=TaskType.DOCUMENT_OPERATION,
+                is_multi_step=True,
+                steps=steps,
+                selected_model="NONE",
+                selected_role="document_tools",
+                reason=f"Multi-step document pipeline combining {' and '.join(doc_op.tools)}.",
+                confidence=1.0,
+                selected_tools=doc_op.tools,
+            )
+        else:
+            steps.append(PlannedStep(
+                step_id=1,
+                task_type=TaskType.DOCUMENT_OPERATION,
+                description=doc_op.description,
+                tool=doc_op.tool_name,
+            ))
+            return ClassificationResult(
+                primary_task=TaskType.DOCUMENT_OPERATION,
+                is_multi_step=False,
+                steps=steps,
+                selected_model="NONE",
+                selected_role="document_tools",
+                reason=f"Deterministic document operation routed to {doc_op.tool_name} tool.",
+                confidence=1.0,
+                selected_tools=[doc_op.tool_name],
+            )
+
+    # 2. Vision Analysis check (Requires explicit visual understanding request)
+    if is_explicit_vision_request(q) or (has_image and any(re.search(p, q_lower) for p in _VISION_PATTERNS)):
         model = get_available_model("vision") or "llava-phi3:latest"
         steps = [
             PlannedStep(1, TaskType.VISION_ANALYSIS, "Load and preprocess image", "files"),
@@ -163,7 +206,7 @@ def classify_task(
             steps=steps,
             selected_model=model,
             selected_role="vision",
-            reason="Multimodal vision task detected from query or uploaded image.",
+            reason="Multimodal vision task detected from query.",
             confidence=0.95,
             selected_tools=["vision", "files", "verifier"],
         )
@@ -294,8 +337,9 @@ def classify_task(
             selected_tools=["rag", "llm", "verifier"],
         )
 
-    # 7. Document Analysis (if PDF/DOCX uploaded or keywords)
-    if has_pdf or has_docx or any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS):
+    # 7. Document Analysis (Explicit document analysis / inspection)
+    has_explicit_analysis = any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS) or any(k in q_lower for k in ("inspection", "safety", "defect", "finding", "measurement"))
+    if has_explicit_analysis or (has_pdf and any(k in q_lower for k in ("analyze", "analysis", "inspect", "sop", "compliance", "report", "finding", "measurement", "what is this document", "summarize"))):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
             PlannedStep(1, TaskType.DOCUMENT_ANALYSIS, "Process document and perform local OCR if scanned", "pdf_processor"),

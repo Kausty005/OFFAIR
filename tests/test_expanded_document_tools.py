@@ -400,6 +400,7 @@ def test_batch_process_isolation():
     assert "doc2.txt" in outputs
 
 
+@pytest.mark.skipif(not tesseract_available(), reason="Tesseract missing")
 def test_ocr_status():
     status = get_ocr_engine_status()
     assert "engine" in status
@@ -412,6 +413,7 @@ def test_ocr_status():
     assert "eng" in status["languages"]
 
 
+@pytest.mark.skipif(not tesseract_available(), reason="Tesseract missing")
 def test_tesseract_config_and_language_resolution():
     cfg = get_tesseract_config()
     assert cfg["available"] is True
@@ -432,6 +434,7 @@ def test_tesseract_config_and_language_resolution():
     assert resolve_ocr_lang("eng") == "eng"
 
 
+@pytest.mark.skipif(not tesseract_available(), reason="Tesseract missing")
 def test_ocr_single_image_with_real_file():
     img_path = Path(__file__).parent.parent / "demo_data" / "inspection_image.jpg"
     assert img_path.exists(), f"Image test file not found at {img_path}"
@@ -444,6 +447,7 @@ def test_ocr_single_image_with_real_file():
     assert any(kw in extracted.upper() for kw in ["INSPECTION", "PUMP", "EQUIPMENT"])
 
 
+@pytest.mark.skipif(not tesseract_available(), reason="Tesseract missing")
 def test_ocr_pdf_document_with_real_file():
     pdf_path = Path(__file__).parent.parent / "demo_data" / "inspection_report.pdf"
     assert pdf_path.exists(), f"PDF test file not found at {pdf_path}"
@@ -460,6 +464,7 @@ def test_ocr_pdf_document_with_real_file():
     assert res["full_text"]
 
 
+@pytest.mark.skipif(not tesseract_available(), reason="Tesseract missing")
 def test_create_searchable_pdf_with_real_file():
     pdf_path = Path(__file__).parent.parent / "demo_data" / "inspection_report.pdf"
     assert pdf_path.exists()

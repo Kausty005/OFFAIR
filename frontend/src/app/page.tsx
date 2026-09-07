@@ -75,10 +75,10 @@ export default function Home() {
     if (result.selected_model || result.task_type) {
       setRouterInfo({
         taskType: result.task_type || "general",
-        selectedModel: result.selected_model || "",
+        selectedModel: result.selected_model || "NONE",
         reason: result.routing_reason || "",
         inference: "LOCAL",
-        endpoint: "localhost:11434",
+        endpoint: result.task_type === "document_operation" ? "localhost:8000 / Document Tools" : "localhost:11434",
       });
     }
   };
