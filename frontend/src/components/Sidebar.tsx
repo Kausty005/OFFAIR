@@ -72,7 +72,7 @@ export default function Sidebar({ activeView, onViewChange, activeSessionId, onS
     }}>
 
       {/* Nav groups */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+      <div style={{ flexShrink: 0, maxHeight: "42vh", overflowY: "auto", padding: "8px 0" }}>
         {groups.map(group => (
           <div key={group}>
             <div style={{
@@ -112,10 +112,10 @@ export default function Sidebar({ activeView, onViewChange, activeSessionId, onS
       </div>
 
       {/* Chat History section */}
-      <div style={{ flex: 1, overflowY: "auto", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
         <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
-          padding: "0 16px 8px"
+          padding: "0 16px 8px", flexShrink: 0
         }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)" }}>
             CHAT HISTORY
@@ -133,7 +133,7 @@ export default function Sidebar({ activeView, onViewChange, activeSessionId, onS
             <Plus size={12} /> NEW
           </button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1, padding: "0 8px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1, padding: "0 8px" }}>
           {sessions.map(s => {
             const isActive = activeSessionId === s.id;
             return (
@@ -208,8 +208,18 @@ function DemoButton({ label, onClick, accent }: { label: string; onClick: () => 
         letterSpacing: "0.02em", width: "100%",
         transition: "all 0.15s",
       }}
-      onMouseEnter={e => { e.currentTarget.style.background = `${accent}20`; }}
-      onMouseLeave={e => { e.currentTarget.style.background = `${accent}10`; }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = `${accent}20`;
+        e.currentTarget.style.borderColor = `${accent}70`;
+        e.currentTarget.style.transform = "translateX(3px)";
+        e.currentTarget.style.boxShadow = `0 4px 12px ${accent}20`;
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = `${accent}10`;
+        e.currentTarget.style.borderColor = `${accent}30`;
+        e.currentTarget.style.transform = "translateX(0)";
+        e.currentTarget.style.boxShadow = "none";
+      }}
     >
       <Plus size={10} />
       {label}

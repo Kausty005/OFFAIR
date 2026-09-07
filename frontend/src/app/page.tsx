@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import Topbar from "@/components/Topbar";
 import Sidebar from "@/components/Sidebar";
-import RightPanel from "@/components/RightPanel";
-import BottomBar from "@/components/BottomBar";
 import WorkbenchView from "@/components/views/WorkbenchView";
 import InspectionView from "@/components/views/InspectionView";
 import CodingView from "@/components/views/CodingView";
@@ -130,16 +128,7 @@ export default function Home() {
           {renderView()}
         </main>
 
-        <RightPanel
-          agentSteps={agentSteps}
-          routerInfo={routerInfo}
-          isRunning={isAgentRunning}
-          outputFiles={outputFiles}
-          ragSources={ragSources}
-        />
       </div>
-
-      <BottomBar systemStatus={systemStatus} />
     </div>
   );
 }

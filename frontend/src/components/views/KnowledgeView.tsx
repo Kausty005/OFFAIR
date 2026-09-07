@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, Upload, FileText, RefreshCw, Search, Sparkles, Database } from "lucide-react";
+import { BookOpen, Upload, FileText, RefreshCw, Search, Sparkles, Database, ChevronDown } from "lucide-react";
 import { SessionUser } from "@/components/LoginPage";
 
 interface KBDoc {
@@ -38,6 +38,7 @@ export default function KnowledgeView({ session }: { session: SessionUser }) {
   const [uploading, setUploading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [uploadRoleAccess, setUploadRoleAccess] = useState<"all" | "eng" | "admin">("all");
+  const [targetOpen, setTargetOpen] = useState(false);
   
   // Search & Q&A state
   const [query, setQuery] = useState("");
@@ -47,6 +48,15 @@ export default function KnowledgeView({ session }: { session: SessionUser }) {
   const [activeTab, setActiveTab] = useState<"search" | "ask">("search");
   
   const fileRef = useRef<HTMLInputElement>(null);
+  const targetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeTargetMenu = (event: MouseEvent) => {
+      if (!targetRef.current?.contains(event.target as Node)) setTargetOpen(false);
+    };
+    document.addEventListener("mousedown", closeTargetMenu);
+    return () => document.removeEventListener("mousedown", closeTargetMenu);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -180,24 +190,25 @@ export default function KnowledgeView({ session }: { session: SessionUser }) {
             <Database size={12} />
             {ingesting ? "Indexing..." : session.role === "admin" ? "Index All Chunks" : "Admin Indexing Only"}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--bg-secondary)", borderRadius: 6, padding: "2px 8px", border: "1px solid var(--border)" }}>
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Target:</span>
-            <select
-              value={uploadRoleAccess}
-              onChange={(e) => setUploadRoleAccess(e.target.value as any)}
-              style={{
-                background: "transparent",
-                border: "none",
-                fontSize: 11,
-                color: "var(--text-primary)",
-                cursor: "pointer",
-                outline: "none",
-              }}
-            >
-              <option value="all" style={{ background: "var(--bg-primary)" }}>Emp+ (All Users)</option>
-              <option value="eng" style={{ background: "var(--bg-primary)" }}>Eng+ (Engineers & Admin)</option>
-              <option value="admin" style={{ background: "var(--bg-primary)" }}>Admin Only</option>
-            </select>
+          <div className="target-role-custom role-select" ref={targetRef}>
+            <span className="target-role-label">Target:</span>
+            <button type="button" className="target-role-trigger" onClick={() => setTargetOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={targetOpen}>
+              <span>{uploadRoleAccess === "all" ? "Emp+ (All Users)" : uploadRoleAccess === "eng" ? "Eng+ (Engineers & Admin)" : "Admin Only"}</span>
+              <ChevronDown size={14} className={`role-select-chevron ${targetOpen ? "is-rotated" : ""}`} />
+            </button>
+            {targetOpen && (
+              <div className="target-role-menu role-select-menu" role="listbox" aria-label="Upload target">
+                {[
+                  ["all", "Emp+ (All Users)"],
+                  ["eng", "Eng+ (Engineers & Admin)"],
+                  ["admin", "Admin Only"],
+                ].map(([value, label]) => (
+                  <button key={value} type="button" role="option" aria-selected={uploadRoleAccess === value} className={`role-option ${uploadRoleAccess === value ? "is-selected" : ""}`} onClick={() => { setUploadRoleAccess(value as "all" | "eng" | "admin"); setTargetOpen(false); }}>
+                    <span className="role-option-marker" />{label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <button
             onClick={() => fileRef.current?.click()}
