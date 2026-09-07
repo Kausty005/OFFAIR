@@ -5,7 +5,9 @@
 import { useState, useRef, useCallback } from "react";
 import { AgentStep, AgentCallbacks } from "@/types";
 
-const API = "http://localhost:8000";
+import { api } from "@/lib/api";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export function useAgent(callbacks?: Partial<AgentCallbacks>) {
   const [isRunning, setIsRunning] = useState(false);
@@ -40,12 +42,8 @@ export function useAgent(callbacks?: Partial<AgentCallbacks>) {
       form.append("task", task);
       form.append("files", JSON.stringify(filePaths));
 
-      const resp = await fetch(`${API}/api/run`, { method: "POST", body: form });
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(`Server error: ${txt}`);
-      }
-      const { task_id } = await resp.json();
+      const resp = await api.post("/run", form);
+      const { task_id } = resp.data;
 
       // 2. Open SSE stream
       const es = new EventSource(`${API}/api/stream/${task_id}`);
@@ -104,10 +102,11 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
   for (const file of files) {
     const form = new FormData();
     form.append("file", file);
-    const r = await fetch("http://localhost:8000/api/upload", { method: "POST", body: form });
-    if (r.ok) {
-      const data = await r.json();
-      paths.push(data.path);
+    try {
+      const r = await api.post("/upload", form);
+      paths.push(r.data.path);
+    } catch (err) {
+      console.error("Upload failed", err);
     }
   }
   return paths;

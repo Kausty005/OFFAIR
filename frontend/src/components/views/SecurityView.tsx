@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api";
 import { SystemStatus } from "@/types";
 import { Shield, CheckCircle, XCircle, RefreshCw, Lock } from "lucide-react";
 
@@ -21,12 +22,12 @@ export default function SecurityView({ systemStatus }: Props) {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [logResp, secResp] = await Promise.all([
-          fetch("http://localhost:8000/api/logs"),
-          fetch("http://localhost:8000/api/security"),
+        const [logsData, secData] = await Promise.allSettled([
+          api.get("/logs"),
+          api.get("/security"),
         ]);
-        if (logResp.ok) setLogs(await logResp.json());
-        if (secResp.ok) setSecurity(await secResp.json());
+        if (logsData.status === "fulfilled" && logsData.value.status === 200) setLogs(logsData.value.data);
+        if (secData.status === "fulfilled" && secData.value.status === 200) setSecurity(secData.value.data);
       } catch {}
     };
     fetchAll();

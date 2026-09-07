@@ -3,6 +3,7 @@
 import { AgentStep, ModelRouterInfo, RAGSource } from "@/types";
 import { CheckCircle, Circle, XCircle, Loader2, Zap, Database, FileText, Download, GitBranch } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { API_BASE } from "@/lib/api";
 
 interface Props {
   agentSteps: AgentStep[];
@@ -94,7 +95,7 @@ export default function RightPanel({ agentSteps, routerInfo, isRunning, outputFi
                 return (
                   <a
                     key={i}
-                    href={`http://localhost:8000/api/download/${encodeURIComponent(name)}`}
+                    href={`${API_BASE}/download/${encodeURIComponent(name)}`}
                     download={name}
                     style={{
                       display: "flex", alignItems: "center", gap: 8,

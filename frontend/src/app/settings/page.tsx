@@ -16,9 +16,9 @@ export default function SettingsPage() {
             icon: Server,
             title: "Backend Server",
             items: [
-              { label: "API Endpoint", value: "http://localhost:8000" },
-              { label: "LLM Endpoint", value: "http://localhost:11434 (Ollama)" },
-              { label: "CORS Policy", value: "localhost only" },
+              { label: "API Endpoint", value: process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000" },
+              { label: "LLM Endpoint", value: "Internal (Ollama)" },
+              { label: "CORS Policy", value: "Private LAN Access" },
             ],
           },
           {

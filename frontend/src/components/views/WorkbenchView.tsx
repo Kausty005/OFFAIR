@@ -173,7 +173,7 @@ export default function WorkbenchView({ callbacks }: Props) {
                       return (
                         <a
                           key={fi}
-                          href={`http://localhost:8000/api/download?path=${encodeURIComponent(fpath)}`}
+                          href={`${API_BASE}/download?path=${encodeURIComponent(fpath)}`}
                           download={fname}
                           style={{
                             display: "inline-flex",

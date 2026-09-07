@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BookOpen, Upload, FileText, RefreshCw, Search, Sparkles, Database } from "lucide-react";
+import { api } from "@/lib/api";
 
 interface KBDoc {
   name: string;
@@ -45,12 +46,11 @@ export default function KnowledgeView() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("http://localhost:8000/api/knowledge");
-      if (r.ok) {
-        const data = await r.json();
-        setDocs(data.documents || []);
-        if (data.vector_store) {
-          setChunkCount(data.vector_store.count || 0);
+      const r = await api.get("/knowledge");
+      if (r.status === 200) {
+        setDocs(r.data.documents || []);
+        if (r.data.vector_store) {
+          setChunkCount(r.data.vector_store.count || 0);
         }
       }
     } catch {}
@@ -69,7 +69,7 @@ export default function KnowledgeView() {
       const form = new FormData();
       form.append("file", f);
       form.append("auto_ingest", "true");
-      await fetch("http://localhost:8000/api/knowledge/upload", { method: "POST", body: form });
+      await api.post("/knowledge/upload", form);
     }
     setUploading(false);
     load();
@@ -79,7 +79,7 @@ export default function KnowledgeView() {
   const handleIngestAll = async () => {
     setIngesting(true);
     try {
-      await fetch("http://localhost:8000/api/knowledge/ingest", { method: "POST" });
+      await api.post("/knowledge/ingest");
       setTimeout(() => {
         load();
         setIngesting(false);
@@ -97,24 +97,14 @@ export default function KnowledgeView() {
 
     try {
       if (activeTab === "search") {
-        const res = await fetch("http://localhost:8000/api/knowledge/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, top_k: 4 }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setSearchResults(data.results || []);
+        const res = await api.post("/knowledge/search", { query, top_k: 4 });
+        if (res.status === 200) {
+          setSearchResults(res.data.results || []);
         }
       } else {
-        const res = await fetch("http://localhost:8000/api/knowledge/ask", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, top_k: 4 }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setRagAnswer(data);
+        const res = await api.post("/knowledge/ask", { query, top_k: 4 });
+        if (res.status === 200) {
+          setRagAnswer(res.data);
         }
       }
     } catch (e) {

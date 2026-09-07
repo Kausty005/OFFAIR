@@ -2,6 +2,8 @@
 
 import { useState, useRef } from "react";
 import { AgentCallbacks } from "@/types";
+import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
 import { useAgent, uploadFiles } from "@/hooks/useAgent";
 import { Factory, Upload, FileText, Play, AlertTriangle, CheckCircle, X } from "lucide-react";
 
@@ -217,7 +219,7 @@ export default function InspectionView({ callbacks }: Props) {
                   </div>
                 </div>
                 <a
-                  href={`http://localhost:8000/api/download/${encodeURIComponent(
+                  href={`${API_BASE}/download/${encodeURIComponent(
                     result.output_files[0].split(/[/\\]/).pop() || ""
                   )}`}
                   download

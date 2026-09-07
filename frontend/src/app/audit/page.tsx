@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { GlassCard } from "@/components/common/glass-card";
 import { Activity, RefreshCw, ChevronRight } from "lucide-react";
 
-const API = "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const LOG_FILTERS = ["ALL", "AGENT", "RAG", "LLM", "INGEST", "AUTH", "ERROR"];
 

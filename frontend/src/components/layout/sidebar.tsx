@@ -19,6 +19,7 @@ const navItems = [
   { name: "Knowledge Base", href: "/knowledge", icon: BookOpen },
   { name: "Generated Files", href: "/files", icon: Files },
   { name: "Security Center", href: "/security", icon: ShieldCheck },
+  { name: "Document Tools", href: "/documents", icon: BookOpen },
   { name: "Audit Logs", href: "/audit", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

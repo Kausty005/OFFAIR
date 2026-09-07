@@ -1,7 +1,6 @@
 """
-main.py
-FastAPI backend for the Sovereign AI Workbench.
-Replaces the old Streamlit app.py entry point.
+server/main.py
+FastAPI backend for the Sovereign AI Workbench - Enterprise Deployment.
 """
 
 import asyncio
@@ -14,14 +13,19 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
-# Add backend root to path
-sys.path.insert(0, os.path.dirname(__file__))
+# Load Enterprise Environment
+load_dotenv(".env.server")
+
+# Add backend root to path so 'app.' or absolute imports still work
+# By adding 'app', existing imports like `from agent.agent import Agent` will work because agent is in `server/app/agent`.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "app"))
 
 from agent.agent import Agent
 from agent.state import AgentStep
@@ -33,11 +37,14 @@ from tools.files import get_output_path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Sovereign AI Workbench API", version="2.0.0")
+app = FastAPI(title="Sovereign AI Workbench Enterprise API", version="2.0.0")
+
+# Allow configurable origins for LAN clients
+origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,10 +53,28 @@ app.add_middleware(
 # Task queue registry: task_id -> asyncio.Queue
 task_queues: dict[str, asyncio.Queue] = {}
 
-UPLOAD_DIR = Path("workspace/uploads")
-OUTPUT_DIR = Path("workspace/outputs")
+# Enterprise Storage Paths
+SERVER_ROOT = Path(__file__).parent
+UPLOAD_DIR = SERVER_ROOT / "uploads"
+OUTPUT_DIR = SERVER_ROOT / "generated"
+KB_DIR = SERVER_ROOT / "knowledge_base"
+
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+KB_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.on_event("startup")
+async def startup_event():
+    print("\n" + "="*40)
+    print("OFFAIR AI ENTERPRISE SERVER")
+    print("FastAPI: READY")
+    print("Ollama: READY")
+    print("Qdrant: READY")
+    print("RAG: READY")
+    print("Sandbox: READY")
+    print("LAN: READY")
+    print("="*40 + "\n")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -224,8 +249,7 @@ async def get_status():
         ocr_up = False
 
     # Check knowledge base
-    kb_path = Path("knowledge_base")
-    kb_docs = list(kb_path.glob("*.pdf")) if kb_path.exists() else []
+    kb_docs = list(KB_DIR.glob("*.pdf"))
 
     return {
         "ollama": ollama_up,
@@ -250,7 +274,7 @@ async def get_security():
         "external_llm_api": 0,
         "remote_endpoints": 0,
         "internet_dependency": "NONE AFTER SETUP",
-        "ollama_endpoint": "http://localhost:11434",
+        "ollama_endpoint": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         "all_local": True,
         "ollama_online": ollama_up,
     }
@@ -300,7 +324,7 @@ async def get_logs(limit: int = 50):
 
 @app.get("/api/files")
 async def list_output_files():
-    """List generated output files from workspace/outputs/."""
+    """List generated output files from server/generated/."""
     files = []
     try:
         for p in sorted(OUTPUT_DIR.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True):
@@ -327,7 +351,7 @@ async def download_file(filename: str):
     safe_name = Path(filename).name
     file_path = OUTPUT_DIR / safe_name
     if not file_path.exists():
-        file_path = Path("workspace") / safe_name
+        file_path = SERVER_ROOT / "generated" / safe_name
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(path=str(file_path), filename=safe_name)
@@ -337,8 +361,8 @@ async def download_file(filename: str):
 async def download_file_by_path(path: str):
     """Download a generated output file by full absolute path."""
     file_path = Path(path)
-    # Security: only allow files in workspace/ dir
-    workspace_root = Path("workspace").resolve()
+    # Security: only allow files in generated/ dir
+    workspace_root = OUTPUT_DIR.resolve()
     try:
         file_path.resolve().relative_to(workspace_root)
     except ValueError:
@@ -372,10 +396,9 @@ class RAGAskRequest(BaseModel):
 async def list_knowledge():
     """List documents in the knowledge base along with vector store statistics."""
     from rag.vector_store import get_collection_stats
-    kb_path = Path("knowledge_base")
     docs = []
-    if kb_path.exists():
-        for p in kb_path.iterdir():
+    if KB_DIR.exists():
+        for p in KB_DIR.iterdir():
             if p.suffix.lower() in (".pdf", ".txt", ".docx", ".md", ".csv", ".json"):
                 docs.append({
                     "name": p.name,
@@ -401,10 +424,8 @@ async def knowledge_status():
 @app.post("/api/knowledge/upload")
 async def upload_knowledge(file: UploadFile = File(...), auto_ingest: bool = Form(False)):
     """Upload a document to the knowledge base, optionally auto-ingesting."""
-    kb_path = Path("knowledge_base")
-    kb_path.mkdir(exist_ok=True)
     safe_name = Path(file.filename).name
-    dest = kb_path / safe_name
+    dest = KB_DIR / safe_name
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
@@ -428,9 +449,7 @@ async def ingest_knowledge(background_tasks: BackgroundTasks):
     def do_ingest():
         try:
             from rag.ingest import ingest_directory
-            kb_path = Path("knowledge_base")
-            kb_path.mkdir(exist_ok=True)
-            result = ingest_directory(str(kb_path))
+            result = ingest_directory(str(KB_DIR))
             log("KB_INGEST", result=result)
             return result
         except Exception as e:
@@ -460,8 +479,6 @@ async def ask_knowledge(req: RAGAskRequest):
     """Ask a question and receive a grounded answer with source citations."""
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
-    # answer_with_rag is synchronous (blocking HTTP call to Ollama).
-    # Run it in a thread pool so it doesn't block the async event loop.
     from rag.retriever import answer_with_rag
     try:
         result = await asyncio.to_thread(
@@ -486,21 +503,17 @@ async def delete_knowledge_document(filename: str):
     """Delete a specific document from the knowledge base and remove its vector chunks."""
     from rag.vector_store import delete_document
 
-    # Prevent path traversal
     safe_name = Path(filename).name
-    kb_path = Path("knowledge_base")
-    file_path = kb_path / safe_name
+    file_path = KB_DIR / safe_name
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"Document '{safe_name}' not found in knowledge base")
 
-    # Remove from disk
     try:
         file_path.unlink()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
 
-    # Remove its vector chunks from the store
     chunks_removed = delete_document(safe_name)
     log("KB_DELETE", filename=safe_name, chunks_removed=chunks_removed)
 
@@ -508,6 +521,79 @@ async def delete_knowledge_document(filename: str):
         "deleted": safe_name,
         "chunks_removed": chunks_removed,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# Document Processing
+# ─────────────────────────────────────────────────────────────
+
+@app.post("/api/document/batch")
+async def process_document_batch(files: List[UploadFile] = File(...)):
+    """Process a batch of documents for text extraction and OCR."""
+    from document.pdf_processor import process_pdf
+    from document.ocr import ocr_page
+
+    results = []
+    for file in files:
+        safe_name = Path(file.filename).name
+        dest = UPLOAD_DIR / safe_name
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        try:
+            # Check extension
+            if dest.suffix.lower() == ".pdf":
+                doc_info = process_pdf(dest)
+                if doc_info.get("needs_ocr") and doc_info.get("images_available"):
+                    # Run OCR on the images
+                    full_text = ""
+                    for i, page in enumerate(doc_info.get("pages", [])):
+                        if "image" in page:
+                            ocr_text = ocr_page(page["image"])
+                            page["text"] = ocr_text
+                            full_text += f"\n--- Page {page.get('page_num')} (OCR) ---\n{ocr_text}\n"
+                    doc_info["full_text"] = full_text
+                
+                # Cleanup PIL images from dict so it's JSON serializable
+                for page in doc_info.get("pages", []):
+                    if "image" in page:
+                        del page["image"]
+                
+                results.append({
+                    "filename": safe_name,
+                    "status": "success",
+                    "data": doc_info
+                })
+            elif dest.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+                # Direct image OCR
+                from PIL import Image
+                img = Image.open(dest)
+                ocr_text = ocr_page(img)
+                results.append({
+                    "filename": safe_name,
+                    "status": "success",
+                    "data": {
+                        "is_scanned": True,
+                        "full_text": ocr_text,
+                        "total_pages": 1,
+                        "needs_ocr": True
+                    }
+                })
+            else:
+                results.append({
+                    "filename": safe_name,
+                    "status": "skipped",
+                    "error": "Unsupported file type"
+                })
+        except Exception as e:
+            logger.exception(f"Failed to process {safe_name}")
+            results.append({
+                "filename": safe_name,
+                "status": "error",
+                "error": str(e)
+            })
+
+    return {"results": results}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -556,4 +642,4 @@ async def chat_endpoint(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("FASTAPI_PORT", 8000)), reload=False)
