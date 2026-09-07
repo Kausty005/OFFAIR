@@ -42,8 +42,14 @@ if ($frontend) {
     Write-Host "      [ERR] Frontend failed to start" -ForegroundColor Red
 }
 
-# Detect local LAN IPv4 address
-$localIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "*Wi-Fi*" -or $_.InterfaceAlias -like "*Ethernet*" } | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+# Detect local LAN IPv4 address (ignore WSL / virtual adapters)
+$localIp = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+    $_.InterfaceAlias -notlike "*vEthernet*" -and 
+    $_.InterfaceAlias -notlike "*Virtual*" -and 
+    $_.InterfaceAlias -notlike "*WSL*" -and
+    $_.IPAddress -notlike "127.*" -and 
+    $_.IPAddress -notlike "169.254.*" 
+} | Sort-Object { if ($_.InterfaceAlias -like "*Wi-Fi*") { 0 } else { 1 } } | Select-Object -First 1).IPAddress
 if (!$localIp) { $localIp = "127.0.0.1" }
 
 Write-Host ""
