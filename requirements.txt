@@ -29,6 +29,7 @@ sentence-transformers
 
 # HTTP
 requests
+pymongo>=4.6.0
 
 # Utilities
 pytest

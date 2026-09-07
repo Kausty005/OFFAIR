@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { BookOpen, Upload, FileText, RefreshCw, Search, Sparkles, Database } from "lucide-react";
+import { SessionUser } from "@/components/LoginPage";
 
 interface KBDoc {
   name: string;
   size: number;
   path: string;
   ext?: string;
+  uploaded_by?: string;
+  uploaded_at?: string;
+  allowed_roles?: string[];
+  min_role_level?: number;
 }
 
 interface SearchResult {
@@ -26,12 +31,13 @@ interface RAGAnswer {
   model?: string;
 }
 
-export default function KnowledgeView() {
+export default function KnowledgeView({ session }: { session: SessionUser }) {
   const [docs, setDocs] = useState<KBDoc[]>([]);
   const [chunkCount, setChunkCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
+  const [uploadRoleAccess, setUploadRoleAccess] = useState<"all" | "eng" | "admin">("all");
   
   // Search & Q&A state
   const [query, setQuery] = useState("");
@@ -65,10 +71,21 @@ export default function KnowledgeView() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     setUploading(true);
+
+    let targetRoles = "admin,engineer,employee";
+    if (uploadRoleAccess === "admin") {
+      targetRoles = "admin";
+    } else if (uploadRoleAccess === "eng") {
+      targetRoles = "admin,engineer";
+    }
+
     for (const f of files) {
       const form = new FormData();
       form.append("file", f);
       form.append("auto_ingest", "true");
+      form.append("session_token", session.token);
+      form.append("allowed_roles", targetRoles);
+      form.append("classification", "internal");
       await fetch("http://localhost:8000/api/knowledge/upload", { method: "POST", body: form });
     }
     setUploading(false);
@@ -79,7 +96,11 @@ export default function KnowledgeView() {
   const handleIngestAll = async () => {
     setIngesting(true);
     try {
-      await fetch("http://localhost:8000/api/knowledge/ingest", { method: "POST" });
+      const form = new FormData();
+      form.append("session_token", session.token);
+      form.append("allowed_roles", session.role);
+      form.append("classification", "internal");
+      await fetch("http://localhost:8000/api/knowledge/ingest", { method: "POST", body: form });
       setTimeout(() => {
         load();
         setIngesting(false);
@@ -100,7 +121,7 @@ export default function KnowledgeView() {
         const res = await fetch("http://localhost:8000/api/knowledge/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, top_k: 4 }),
+          body: JSON.stringify({ query, top_k: 4, session_token: session.token }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -110,7 +131,7 @@ export default function KnowledgeView() {
         const res = await fetch("http://localhost:8000/api/knowledge/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, top_k: 4 }),
+          body: JSON.stringify({ query, top_k: 4, session_token: session.token }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -145,20 +166,39 @@ export default function KnowledgeView() {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={load} className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }}>
             <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
           <button
             onClick={handleIngestAll}
-            disabled={ingesting}
+            disabled={ingesting || session.role !== "admin"}
             className="btn btn-ghost"
             style={{ padding: "6px 12px", fontSize: 12, border: "1px solid var(--border)" }}
           >
             <Database size={12} />
-            {ingesting ? "Indexing..." : "Index All Chunks"}
+            {ingesting ? "Indexing..." : session.role === "admin" ? "Index All Chunks" : "Admin Indexing Only"}
           </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--bg-secondary)", borderRadius: 6, padding: "2px 8px", border: "1px solid var(--border)" }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Target:</span>
+            <select
+              value={uploadRoleAccess}
+              onChange={(e) => setUploadRoleAccess(e.target.value as any)}
+              style={{
+                background: "transparent",
+                border: "none",
+                fontSize: 11,
+                color: "var(--text-primary)",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              <option value="all" style={{ background: "var(--bg-primary)" }}>Emp+ (All Users)</option>
+              <option value="eng" style={{ background: "var(--bg-primary)" }}>Eng+ (Engineers & Admin)</option>
+              <option value="admin" style={{ background: "var(--bg-primary)" }}>Admin Only</option>
+            </select>
+          </div>
           <button
             onClick={() => fileRef.current?.click()}
             className="btn btn-primary"
@@ -404,31 +444,64 @@ export default function KnowledgeView() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-              {docs.map((doc, i) => (
-                <div key={i} className="card card-hover" style={{ padding: "14px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <FileText size={20} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                      }}>
-                        {doc.name}
+              {docs.map((doc, i) => {
+                const isAdminOnly = doc.allowed_roles && doc.allowed_roles.length === 1 && doc.allowed_roles[0] === "admin";
+                const isEngPlus = doc.allowed_roles && doc.allowed_roles.includes("engineer") && !doc.allowed_roles.includes("employee");
+                return (
+                  <div key={i} className="card card-hover" style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <FileText size={20} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                        }}>
+                          {doc.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span>{formatSize(doc.size)}</span>
+                          <span>·</span>
+                          <span style={{ color: "var(--text-secondary)" }}>
+                            👤 @{doc.uploaded_by || "admin"}
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
-                        {formatSize(doc.size)} · RAG Indexed
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <span style={{
+                          fontSize: 10, padding: "2px 6px", borderRadius: 4,
+                          background: isAdminOnly
+                            ? "rgba(239,68,68,0.12)"
+                            : isEngPlus
+                            ? "rgba(56,189,248,0.12)"
+                            : "rgba(0,214,143,0.08)",
+                          color: isAdminOnly
+                            ? "var(--accent-red, #f87171)"
+                            : isEngPlus
+                            ? "var(--accent-blue, #38bdf8)"
+                            : "var(--accent-green)",
+                          border: `1px solid ${
+                            isAdminOnly
+                              ? "rgba(239,68,68,0.3)"
+                              : isEngPlus
+                              ? "rgba(56,189,248,0.3)"
+                              : "rgba(0,214,143,0.2)"
+                          }`,
+                          fontWeight: 600,
+                        }}>
+                          {isAdminOnly ? "Admin Only" : isEngPlus ? "Engineer+" : "Emp+ (All)"}
+                        </span>
+                        <span style={{
+                          fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                          background: "var(--bg-secondary)", color: "var(--text-muted)",
+                          border: "1px solid var(--border)",
+                        }}>
+                          {(doc.ext || doc.name.split(".").pop() || "DOC").toUpperCase()}
+                        </span>
                       </div>
                     </div>
-                    <span style={{
-                      fontSize: 10, padding: "2px 6px", borderRadius: 4,
-                      background: "rgba(0,214,143,0.08)", color: "var(--accent-green)",
-                      border: "1px solid rgba(0,214,143,0.2)", flexShrink: 0
-                    }}>
-                      {(doc.ext || doc.name.split(".").pop() || "DOC").toUpperCase()}
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

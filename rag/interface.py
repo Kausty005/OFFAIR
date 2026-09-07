@@ -13,6 +13,7 @@ reranking, or fine-grained RBAC/permission filtering without modifying any agent
 
 from typing import Any, Optional
 from security.audit import log
+from security.permissions import User
 from rag.retriever import retrieve as _default_retrieve
 
 
@@ -49,12 +50,19 @@ def retrieve_context(
         has_filters=bool(filters),
     )
 
-    # Future team integration point:
-    # 1. Enforce RBAC / document authorization against user_context
-    # 2. Apply metadata filters
-    # 3. Perform hybrid dense + sparse retrieval (Qdrant / BM25)
-    # 4. Apply cross-encoder reranking
-    # For now, calls the validated local vector retriever:
-    chunks = _default_retrieve(query=query, top_k=top_k)
+    user = None
+    authorized_only = user_context is not None
+    if user_context is not None:
+        user = User(
+            str(user_context.get("user_id") or user_context.get("username") or ""),
+            str(user_context.get("role", "")),
+        )
+
+    chunks = _default_retrieve(
+        query=query,
+        top_k=top_k,
+        user=user,
+        authorized_only=authorized_only,
+    )
 
     return chunks

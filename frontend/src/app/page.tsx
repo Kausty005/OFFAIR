@@ -13,6 +13,7 @@ import KnowledgeView from "@/components/views/KnowledgeView";
 import SecurityView from "@/components/views/SecurityView";
 import DocumentToolsView from "@/components/views/DocumentToolsView";
 import { AgentStep, ModelRouterInfo, SystemStatus } from "@/types";
+import LoginPage, { SessionUser } from "@/components/LoginPage";
 
 export default function Home() {
   const [activeView, setActiveView] = useState<string>("workbench");
@@ -23,6 +24,14 @@ export default function Home() {
   const [finalOutput, setFinalOutput] = useState<string>("");
   const [outputFiles, setOutputFiles] = useState<string[]>([]);
   const [ragSources, setRagSources] = useState<any[]>([]);
+  const [session, setSession] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("offair_session");
+    if (stored) {
+      try { setSession(JSON.parse(stored)); } catch { localStorage.removeItem("offair_session"); }
+    }
+  }, []);
 
   // Fetch system status on mount and every 10s
   useEffect(() => {
@@ -97,7 +106,7 @@ export default function Home() {
       case "vision":
         return <VisionView callbacks={agentCallbacks} />;
       case "knowledge":
-        return <KnowledgeView />;
+        return <KnowledgeView session={session!} />;
       case "security":
         return <SecurityView systemStatus={systemStatus} />;
       case "document-tools":
@@ -107,9 +116,11 @@ export default function Home() {
     }
   };
 
+  if (!session) return <LoginPage onAuthenticated={setSession} />;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-      <Topbar systemStatus={systemStatus} />
+      <Topbar systemStatus={systemStatus} session={session} onLogout={() => { localStorage.removeItem("offair_session"); setSession(null); }} />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar activeView={activeView} onViewChange={setActiveView} />

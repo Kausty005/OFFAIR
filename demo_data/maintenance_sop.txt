@@ -1,0 +1,96 @@
+
+MAINTENANCE STANDARD OPERATING PROCEDURE
+=========================================
+
+[FICTIONAL/DEMO DOCUMENT - NOT REAL PROCEDURE]
+
+Document No: SOP-MECH-042 (FICTIONAL)
+Title: Centrifugal Pump Maintenance and Inspection Procedure
+Revision: 4
+Date: 2024-01-15
+Approved By: Chief Engineer (FICTIONAL)
+
+1. PURPOSE
+----------
+This procedure provides guidelines for inspection, maintenance, and 
+overhaul of centrifugal pumps in process plants. This is a fictional 
+demonstration document for SIH26117.
+
+2. SCOPE
+--------
+Applicable to all centrifugal pumps in the CDU, VDU, and utility sections.
+Equipment classes: P-100 to P-200 series.
+
+3. BEARING INSPECTION AND REPLACEMENT
+--------------------------------------
+Section 3.1 - Temperature Limits
+- Normal operating temperature: 55-75 degrees Celsius
+- Warning threshold: 75-85 degrees Celsius (increase monitoring, schedule inspection)
+- Action threshold: Above 85 degrees Celsius (immediate inspection required)
+- Critical threshold: Above 95 degrees Celsius (immediate shutdown required)
+
+Section 3.2 - Vibration Limits
+- Acceptable: Below 4.5 mm/s RMS
+- Warning: 4.5 - 7.0 mm/s RMS (schedule maintenance)
+- Action required: Above 7.0 mm/s RMS (maintenance within 48 hours)
+
+Section 3.3 - Bearing Replacement Procedure
+Step 1: Isolate pump from process (close suction/discharge valves, de-energize motor)
+Step 2: Lock-out-tag-out (LOTO) all energy sources
+Step 3: Cool down to ambient temperature (minimum 2 hours after shutdown)
+Step 4: Remove coupling guard and disconnect coupling
+Step 5: Remove bearing housing cover
+Step 6: Extract bearing using appropriate puller (do not hammer)
+Step 7: Inspect shaft for scoring or wear
+Step 8: Install new bearing (clean shaft, correct orientation)
+Step 9: Pack with approved grease (3/4 filled only)
+Step 10: Reassemble and torque all fasteners to specification
+Step 11: Re-align pump-motor coupling (tolerance: +/- 0.05 mm)
+Step 12: Run-in period: 2 hours at 50% load, monitor temperature and vibration
+
+4. MECHANICAL SEAL MAINTENANCE
+--------------------------------
+Section 4.1 - Seal Inspection
+Inspect for: leakage, heat marks, face damage, spring condition
+Acceptable leakage: Less than 1 drop per minute (for standard seals)
+Action leakage: 3 or more drops per minute (schedule replacement within 7 days)
+
+Section 4.2 - Seal Replacement Procedure
+Step 1: LOTO and isolate pump as per Section 3.3 Steps 1-3
+Step 2: Drain pump casing
+Step 3: Remove impeller (note: left-hand thread on most pumps in this plant)
+Step 4: Remove seal gland plate and spring
+Step 5: Slide out rotating seal faces
+Step 6: Remove stationary seat from gland
+Step 7: Clean all surfaces thoroughly
+Step 8: Install new stationary seat (use assembly lubricant)
+Step 9: Install new rotating assembly
+Step 10: Set correct spring compression per manufacturer spec
+Step 11: Reassemble pump
+Step 12: Flush seal before startup (flush for 5 minutes minimum)
+
+5. APPROVAL REQUIREMENTS
+--------------------------
+Section 5.1 - Work Authorization
+All maintenance activities on process-critical equipment require:
+- Written Work Order signed by Maintenance Supervisor
+- Approval from Section Head for planned shutdowns
+- Plant Manager approval for unplanned emergency shutdowns
+- Safety officer sign-off for hot work
+
+Section 5.2 - Documentation Requirements
+- Complete inspection checklist before and after maintenance
+- Record all measurements (temperature, vibration, alignment)
+- Photograph key components before disassembly
+- Update equipment history card
+
+6. SAFETY PRECAUTIONS
+-----------------------
+- Always use LOTO before working on rotating equipment
+- Wear appropriate PPE (safety glasses, gloves, hearing protection)
+- Never work on energized equipment
+- Ensure area is properly ventilated for hydrocarbon service
+- Have spill kit available for oil leaks
+- Emergency shower and eyewash within 10 seconds travel
+
+[THIS IS FICTIONAL DEMO DATA]

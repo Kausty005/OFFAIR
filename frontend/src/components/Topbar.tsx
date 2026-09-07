@@ -1,13 +1,16 @@
 "use client";
 
 import { SystemStatus } from "@/types";
+import { SessionUser } from "./LoginPage";
 import { Shield, Cpu, WifiOff } from "lucide-react";
 
 interface Props {
   systemStatus: SystemStatus | null;
+  session: SessionUser;
+  onLogout: () => void;
 }
 
-export default function Topbar({ systemStatus }: Props) {
+export default function Topbar({ systemStatus, session, onLogout }: Props) {
   const ollamaUp = systemStatus?.ollama ?? false;
   const dockerUp = systemStatus?.docker ?? false;
 
@@ -43,6 +46,11 @@ export default function Topbar({ systemStatus }: Props) {
 
       {/* Right: Status pills */}
       <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid var(--border)", paddingLeft: 16 }}>
+          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{session.username}</span>
+          <span className="badge badge-blue">{session.role}</span>
+          <button className="btn btn-ghost" onClick={onLogout} style={{ padding: "3px 8px", fontSize: 10 }}>Sign out</button>
+        </div>
         <StatusPill label="LOCAL AI" ok={ollamaUp} okText="ONLINE" failText="OFFLINE" />
         <StatusPill label="SANDBOX" ok={dockerUp} okText="READY" failText="N/A" />
 

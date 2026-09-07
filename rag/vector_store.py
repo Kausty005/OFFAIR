@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import math
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,7 @@ _base = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _base)
 
 from security.audit import log
+from security.permissions import User, can_user_access
 
 import yaml
 _cfg_path = os.path.join(_base, "config", "settings.yaml")
@@ -141,6 +143,8 @@ def search(
     top_k: int = _TOP_K,
     where: Optional[dict] = None,
     query_text: Optional[str] = None,
+    user: Optional[User] = None,
+    authorized_only: bool = False,
 ) -> list[dict]:
     """
     Semantic search using a query embedding with lexical fallback.
@@ -154,7 +158,7 @@ def search(
 
         is_zero_vector = not query_embedding or all(v == 0.0 for v in query_embedding)
 
-        # --- Apply metadata filter first (reduces the matrix size) ---
+        # --- Apply metadata and authorization filters first ---
         if where:
             indices = [
                 i for i in range(len(store["ids"]))
@@ -162,6 +166,26 @@ def search(
             ]
         else:
             indices = list(range(len(store["ids"])))
+
+        if authorized_only:
+            if user is None:
+                return []
+            denied_sources = sorted({
+                store["metadatas"][i].get("source", "unknown")
+                for i in indices
+                if not can_user_access(user, store["metadatas"][i])
+            })
+            log(
+                "RAG_ACCESS_FILTER",
+                user_id=user.user_id,
+                role=user.normalized_role,
+                denied_documents=denied_sources,
+                candidates_before_filter=len(indices),
+            )
+            indices = [
+                i for i in indices
+                if can_user_access(user, store["metadatas"][i])
+            ]
 
         if not indices:
             return []
@@ -215,11 +239,94 @@ def search(
         results.sort(key=lambda x: x["score"], reverse=True)
         results = results[:top_k]
 
-        log("RAG_SEARCH", results=len(results), collection=_COLLECTION_NAME,
-            backend="numpy" if _NUMPY_AVAILABLE else "python")
+        log(
+            "RAG_SEARCH",
+            results=len(results),
+            collection=_COLLECTION_NAME,
+            backend="numpy" if _NUMPY_AVAILABLE else "python",
+            authorized_only=authorized_only,
+            user_id=user.user_id if user else None,
+            role=user.normalized_role if user else None,
+        )
         return results
     except Exception as e:
         log("VECTOR_SEARCH_ERROR", error=str(e))
+        return []
+
+
+def keyword_search(
+    query: str,
+    top_k: int = _TOP_K,
+    user: Optional[User] = None,
+    authorized_only: bool = False,
+) -> list[dict]:
+    """Search authorized chunks with a local BM25-style keyword scorer."""
+    try:
+        store = _load_store()
+        if not store["ids"] or not query.strip():
+            return []
+
+        query_terms = re.findall(r"[a-zA-Z0-9_-]+", query.lower())
+        if not query_terms:
+            return []
+
+        tokenized_documents = [
+            re.findall(r"[a-zA-Z0-9_-]+", text.lower())
+            for text in store["documents"]
+        ]
+        average_length = sum(len(tokens) for tokens in tokenized_documents) / max(len(tokenized_documents), 1)
+        document_frequency = {
+            term: sum(term in set(tokens) for tokens in tokenized_documents)
+            for term in set(query_terms)
+        }
+        total_documents = len(tokenized_documents)
+        candidates = []
+        for index, terms in enumerate(tokenized_documents):
+            metadata = store["metadatas"][index]
+            if authorized_only and (user is None or not can_user_access(user, metadata)):
+                continue
+            if not terms:
+                continue
+            term_counts = {term: terms.count(term) for term in set(terms)}
+            document_length_factor = 1 - 0.75 + 0.75 * len(terms) / max(average_length, 1)
+            score = 0.0
+            for term in query_terms:
+                frequency = term_counts.get(term, 0)
+                if not frequency:
+                    continue
+                inverse_document_frequency = math.log(
+                    1 + (total_documents - document_frequency.get(term, 0) + 0.5)
+                    / (document_frequency.get(term, 0) + 0.5)
+                )
+                score += inverse_document_frequency * (
+                    frequency * 2.0
+                    / (frequency + 2.0 * document_length_factor)
+                )
+            if score <= 0:
+                continue
+            candidates.append((score, index))
+
+        results = []
+        for score, index in sorted(candidates, reverse=True)[:top_k]:
+            metadata = store["metadatas"][index]
+            results.append({
+                "id": store["ids"][index],
+                "text": store["documents"][index],
+                "metadata": metadata,
+                "score": round(float(score), 4),
+                "document": metadata.get("source", "unknown"),
+                "page": metadata.get("page", ""),
+                "section": metadata.get("section", ""),
+            })
+        log(
+            "RAG_KEYWORD_SEARCH",
+            results=len(results),
+            authorized_only=authorized_only,
+            user_id=user.user_id if user else None,
+        )
+        return results
+    except Exception as e:
+        log("KEYWORD_SEARCH_ERROR", error=str(e))
         return []
 
 
