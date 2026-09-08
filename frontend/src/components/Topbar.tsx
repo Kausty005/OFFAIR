@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { SystemStatus } from "@/types";
 import { SessionUser } from "./LoginPage";
-import { Shield, Cpu, WifiOff } from "lucide-react";
+import { Shield, Cpu, WifiOff, Sun, Moon } from "lucide-react";
 
 interface Props {
   systemStatus: SystemStatus | null;
@@ -13,6 +14,20 @@ interface Props {
 export default function Topbar({ systemStatus, session, onLogout }: Props) {
   const ollamaUp = systemStatus?.ollama ?? false;
   const dockerUp = systemStatus?.docker ?? false;
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const savedTheme = (localStorage.getItem("offair_theme") as "dark" | "light") || "dark";
+    setTheme(savedTheme);
+    document.documentElement.setAttribute("data-theme", savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("offair_theme", nextTheme);
+    document.documentElement.setAttribute("data-theme", nextTheme);
+  };
 
   return (
     <div style={{
@@ -44,8 +59,25 @@ export default function Topbar({ systemStatus, session, onLogout }: Props) {
         </div>
       </div>
 
-      {/* Right: Status pills */}
-      <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+      {/* Right: Status pills & Theme Toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <button
+          className="btn btn-ghost"
+          onClick={toggleTheme}
+          title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
+          style={{
+            padding: "4px 10px",
+            fontSize: 11,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            borderRadius: 6,
+          }}
+        >
+          {theme === "dark" ? <Sun size={13} color="var(--accent-orange)" /> : <Moon size={13} color="var(--accent-blue)" />}
+          <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+        </button>
+
         <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "1px solid var(--border)", paddingLeft: 16 }}>
           <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{session.username}</span>
           <span className="badge badge-blue">{session.role}</span>

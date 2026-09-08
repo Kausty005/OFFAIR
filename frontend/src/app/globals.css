@@ -25,6 +25,31 @@
   --accent-purple:  #a855f7;
 }
 
+[data-theme="light"] {
+  /* Backgrounds — Clean Crisp Light Mode */
+  --bg-primary:     #f8fafc;
+  --bg-secondary:   #ffffff;
+  --bg-card:        #f1f5f9;
+  --bg-card-hover:  #e2e8f0;
+  --bg-input:       #ffffff;
+
+  /* Borders */
+  --border:         #e2e8f0;
+  --border-accent:  #cbd5e1;
+
+  /* Text */
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+
+  /* Accents */
+  --accent-orange:  #ea580c;
+  --accent-green:   #16a34a;
+  --accent-blue:    #2563eb;
+  --accent-red:     #dc2626;
+  --accent-purple:  #9333ea;
+}
+
 * {
   box-sizing: border-box;
 }
