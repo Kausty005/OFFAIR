@@ -639,6 +639,17 @@ def node_execute_vision_analysis(state: AgentStateDict) -> AgentStateDict:
             "generated_response": "No image file provided for vision analysis. Please attach or upload an inspection image.",
         }
 
+    user_context = state.get("user_context")
+    if user_context is not None:
+        related_context = retrieve_context(query, user_context=user_context, top_k=3)
+        if not related_context:
+            _emit_event(state, "RAG_ABSTAINED", {"reason": "NO_RELEVANT_AUTHORIZED_SOURCE", "query": query[:120]})
+            return {
+                "generated_response": "No information available: no related authorized source was found in the knowledge base.",
+                "retrieved_context": [],
+                "output_files": [],
+            }
+
     target_img = img_files[0]
     _emit_event(state, "TOOL_EXECUTION_STARTED", {"tool": "vision", "model": model, "file": Path(target_img).name})
 
@@ -1129,6 +1140,40 @@ def node_execute_multi_step(state: AgentStateDict) -> AgentStateDict:
                 p_out = min(nums[0], nums[1])
                 calc_res = pump_efficiency(input_power_kw=p_in, output_power_kw=p_out)
                 tool_results["calculations"] = calc_res
+        elif tool == "pdf_generator":
+            clean_t = re.sub(r"(?i)\b(?:make|generate|create|write)\s+(?:a\s+)?(?:pdf|pdf\s+report|pdf\s+document|report\s+as\s+pdf|report)\b", "", query).strip() or "Technical Report"
+            clean_safe = re.sub(r"[^\w\-]", "_", clean_t[:30]).strip("_") or "Report"
+            out_path = get_output_path(f"{clean_safe}.pdf")
+            content_md = (
+                f"# {clean_t.title()}\n\n"
+                f"## Executive Summary\nAnalysis generated for: {query}\n\n"
+            )
+            if retrieved:
+                content_md += f"## Knowledge Base Context\n" + "\n\n".join(f"- {c.get('text', '')[:300]}" for c in retrieved[:3])
+            pdf_res = create_pdf_from_markdown(
+                content_md,
+                title=clean_t.title(),
+                output_path=out_path,
+            )
+            if pdf_res and pdf_res.get("success"):
+                output_files.append(str(out_path))
+        elif tool == "pptx_generator":
+            clean_t = re.sub(r"(?i)\b(?:make|generate|create|write)\s+(?:a\s+)?(?:ppt|pptx|powerpoint|presentation|slides)\b", "", query).strip() or "Presentation"
+            clean_safe = re.sub(r"[^\w\-]", "_", clean_t[:30]).strip("_") or "Presentation"
+            out_path = get_output_path(f"{clean_safe}.pptx")
+            content_md = (
+                f"### {clean_t.title()}\n*OffAir AI Sovereign Workbench*\n\n---\n\n"
+                f"#### Slide 1: Overview\n- Topic: {query}\n"
+            )
+            if retrieved:
+                content_md += f"#### Slide 2: Knowledge Base Findings\n" + "\n".join(f"- {c.get('text', '')[:100]}" for c in retrieved[:3])
+            ppt_res = create_presentation_from_markdown(
+                content_md,
+                default_title=clean_t.title(),
+                output_path=out_path,
+            )
+            if ppt_res and ppt_res.get("success"):
+                output_files.append(str(out_path))
         elif tool == "docx_generator":
             clean_t = re.sub(r"(?i)\b(?:make|generate|create|write)\s+(?:a\s+)?(?:word\s+document|docx|report)\b", "", query).strip() or "Technical Report"
             clean_safe = re.sub(r"[^\w\-]", "_", clean_t[:30])

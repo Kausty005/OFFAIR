@@ -67,8 +67,8 @@ _CALCULATION_PATTERNS = [
     r"^\s*calculate\s+[\d\(\)\.\+\-\*\/\^ ]+",
     r"^\s*compute\s+[\d\(\)\.\+\-\*\/\^ ]+",
     r"^\s*[\d\(\)\.\+\-\*\/\^ ]{4,}\s*$",  # Pure math expression like (25 * 4) / 10
-    r"\bcalculate\s+(?:the\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
-    r"\bcompute\s+(?:the\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
+    r"\bcalculate\s+(?:.*?\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
+    r"\bcompute\s+(?:.*?\s+)?(?:efficiency|power|pressure|temperature|math|value|result|formula|ratio)\b",
     r"\bmath\s+eval(?:uation)?\b",
 ]
 
@@ -93,14 +93,6 @@ _KNOWLEDGE_PATTERNS = [
     r"\boperating\s+limits?\b",
     r"\bguidelines?\b",
     r"\bspecifications?\b",
-    r"\bwhat\s+are\b",
-    r"\bwhat\s+is\b",
-    r"\bhow\s+do\b",
-    r"\bhow\s+to\b",
-    r"\bwhen\s+to\b",
-    r"\bexplain\b",
-    r"\bdescribe\b",
-    r"\bdetails?\s+of\b",
 ]
 
 _VISION_PATTERNS = [
@@ -141,7 +133,8 @@ _PRESENTATION_PATTERNS = [
 ]
 
 _DOCUMENT_ANALYSIS_PATTERNS = [
-    r"\banalyze\s+(?:this\s+)?(?:uploaded\s+)?(?:document|pdf|inspection\s+report|file|attachment)\b",
+    r"\banalyze\s+(?:this\s+)?(?:uploaded\s+)?(?:document|pdf|inspection\s+report|report|file|attachment)\b",
+    r"\binspect\s+(?:this\s+)?(?:uploaded\s+)?(?:document|pdf|inspection\s+report|report|file|attachment)\b",
     r"\bextract\s+findings\s+from\b",
     r"\bparse\s+(?:this\s+)?(?:document|pdf|file)\b",
     r"\bextract\s+(?:data|measurements|defects)\s+from\s+(?:this\s+)?(?:file|pdf|document)\b",
@@ -243,10 +236,14 @@ def classify_task(
     has_doc_intent = (any(re.search(p, q_lower) for p in _DOCUMENT_ANALYSIS_PATTERNS) or (has_pdf and any(k in q_lower for k in ("analyze", "extract", "parse"))))
     has_rag_intent = any(re.search(p, q_lower) for p in _KNOWLEDGE_PATTERNS)
     has_calc_intent = any(re.search(p, q_lower) for p in _CALCULATION_PATTERNS)
-    has_report_intent = any(re.search(p, q_lower) for p in _REPORT_PATTERNS) or any(re.search(p, q_lower) for p in _PDF_PATTERNS) or any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS)
+    
+    has_pdf_intent = any(re.search(p, q_lower) for p in _PDF_PATTERNS) or any(re.search(p, q_lower) for p in _DOCUMENT_GENERATION_PATTERNS)
+    has_pptx_intent = any(re.search(p, q_lower) for p in _PRESENTATION_PATTERNS)
+    has_docx_intent = any(re.search(p, q_lower) for p in _REPORT_PATTERNS)
+    has_output_intent = has_pdf_intent or has_pptx_intent or has_docx_intent
 
-    matched_intents = sum([has_doc_intent, has_rag_intent, has_calc_intent, has_report_intent])
-    if matched_intents >= 3 or ("and" in q_lower and matched_intents >= 2 and has_report_intent):
+    matched_intents = sum([has_doc_intent, has_rag_intent, has_calc_intent, has_output_intent])
+    if matched_intents >= 3 or ("and" in q_lower and matched_intents >= 2 and has_output_intent):
         is_multi = True
         steps = []
         step_id = 1
@@ -266,7 +263,15 @@ def classify_task(
         steps.append(PlannedStep(step_id, "reasoning", "Synthesize findings, SOP standards, and calculations", "llm_reasoning"))
         tools.append("llm_reasoning")
         step_id += 1
-        if has_report_intent:
+        if has_pdf_intent:
+            steps.append(PlannedStep(step_id, TaskType.PDF_GENERATION, "Generate structured PDF report (.pdf)", "pdf_generator"))
+            tools.append("pdf_generator")
+            step_id += 1
+        elif has_pptx_intent:
+            steps.append(PlannedStep(step_id, TaskType.PRESENTATION_GENERATION, "Generate structured presentation (.pptx)", "pptx_generator"))
+            tools.append("pptx_generator")
+            step_id += 1
+        elif has_docx_intent or has_output_intent:
             steps.append(PlannedStep(step_id, TaskType.REPORT_GENERATION, "Generate structured Word deliverable (.docx)", "docx_generator"))
             tools.append("docx_generator")
             step_id += 1
@@ -344,23 +349,23 @@ def classify_task(
             selected_tools=tools,
         )
 
-    # 6. Report Generation (Word DOCX) - High priority when explicitly requested
-    if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
+    # 6. PDF Report Generation (Check PDF patterns before generic docx report)
+    if any(re.search(p, q_lower) for p in _PDF_PATTERNS) or any(re.search(p, q_lower) for p in _DOCUMENT_GENERATION_PATTERNS):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
-            PlannedStep(1, TaskType.REPORT_GENERATION, "Synthesize report sections using local model", "llm"),
-            PlannedStep(2, TaskType.REPORT_GENERATION, "Generate formatted Word document (.docx)", "docx_generator"),
-            PlannedStep(3, TaskType.REPORT_GENERATION, "Verify generated document on filesystem", "verifier"),
+            PlannedStep(1, TaskType.PDF_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.PDF_GENERATION, "Generate formatted PDF report (.pdf)", "pdf_generator"),
+            PlannedStep(3, TaskType.PDF_GENERATION, "Verify generated PDF report on filesystem", "verifier"),
         ]
         return ClassificationResult(
-            primary_task=TaskType.REPORT_GENERATION,
+            primary_task=TaskType.PDF_GENERATION,
             is_multi_step=False,
             steps=steps,
             selected_model=model,
             selected_role="general",
-            reason="Formal document generation request routed to DOCX generator.",
-            confidence=0.95,
-            selected_tools=["llm", "docx_generator", "verifier"],
+            reason="PDF document generation request routed to PDF generator.",
+            confidence=0.92,
+            selected_tools=["llm", "pdf_generator", "verifier"],
         )
 
     # 6.5. Presentation Generation
@@ -382,23 +387,23 @@ def classify_task(
             selected_tools=["llm", "pptx_generator", "verifier"],
         )
 
-    # 6.6. PDF Report Generation
-    if any(re.search(p, q_lower) for p in _PDF_PATTERNS):
+    # 6.6. Report Generation (Word DOCX)
+    if any(re.search(p, q_lower) for p in _REPORT_PATTERNS):
         model = get_available_model("general") or "llama3.1:8b"
         steps = [
-            PlannedStep(1, TaskType.PDF_GENERATION, "Synthesize report sections using local model", "llm"),
-            PlannedStep(2, TaskType.PDF_GENERATION, "Generate formatted PDF report (.pdf)", "pdf_generator"),
-            PlannedStep(3, TaskType.PDF_GENERATION, "Verify generated PDF report on filesystem", "verifier"),
+            PlannedStep(1, TaskType.REPORT_GENERATION, "Synthesize report sections using local model", "llm"),
+            PlannedStep(2, TaskType.REPORT_GENERATION, "Generate formatted Word document (.docx)", "docx_generator"),
+            PlannedStep(3, TaskType.REPORT_GENERATION, "Verify generated document on filesystem", "verifier"),
         ]
         return ClassificationResult(
-            primary_task=TaskType.PDF_GENERATION,
+            primary_task=TaskType.REPORT_GENERATION,
             is_multi_step=False,
             steps=steps,
             selected_model=model,
             selected_role="general",
-            reason="PDF document generation request routed to PDF generator.",
-            confidence=0.92,
-            selected_tools=["llm", "pdf_generator", "verifier"],
+            reason="Formal document generation request routed to DOCX generator.",
+            confidence=0.95,
+            selected_tools=["llm", "docx_generator", "verifier"],
         )
 
     # 7. Knowledge Query (RAG)

@@ -67,12 +67,12 @@ def can_user_access(user: User, chunk: dict[str, Any]) -> bool:
     if not isinstance(user, User):
         return True
 
-    # If user ID and role are both blank, default to full local admin access
+    # If user ID or role is blank, deny access
     user_id = user.user_id.strip().lower()
     role = user.normalized_role
 
-    if not user_id and not role:
-        return True
+    if not user_id or not role:
+        return False
 
     # Admin and superusers can access all documents across the system
     if role in SUPERUSER_ROLES or role == "admin":
@@ -92,9 +92,9 @@ def can_user_access(user: User, chunk: dict[str, Any]) -> bool:
         except (ValueError, TypeError):
             return True
 
-    # If no specific roles are required, document is open for all authenticated users
-    if not allowed_roles:
-        return True
+    # If no specific roles or levels are specified on the chunk, deny access by default
+    if not allowed_roles and "min_role_level" not in chunk:
+        return False
 
     if role in allowed_roles:
         return True

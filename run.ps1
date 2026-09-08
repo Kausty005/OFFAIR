@@ -12,7 +12,7 @@ Write-Host ""
 Write-Host "[1/3] Checking Ollama..." -ForegroundColor Yellow
 $ollamaUp = $false
 try {
-    $resp = Invoke-WebRequest -Uri "http://localhost:11434/" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:11434/" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     if ($resp.StatusCode -eq 200) {
         Write-Host "      [OK] Ollama is running" -ForegroundColor Green
         $ollamaUp = $true
