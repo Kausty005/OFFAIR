@@ -236,7 +236,8 @@ async def run_agent_endpoint(
         try:
             authenticated = user_from_token(u_context["session_token"])
         except Exception as exc:
-            raise HTTPException(status_code=503, detail=f"MongoDB unavailable: {exc}") from exc
+            logger.warning(f"Session lookup error: {exc}")
+            authenticated = None
         if not authenticated:
             raise HTTPException(status_code=401, detail="Valid login session required")
         u_context = authenticated
