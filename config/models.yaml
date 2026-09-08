@@ -7,10 +7,11 @@ models:
 
   general:
     provider: ollama
-    name: qwen2.5-coder:3b
-    description: "General reasoning and document understanding"
+    name: qwen3:4b
+    description: "General reasoning, document synthesis, and presentation generation (Qwen3 4B)"
+    fallback: llama3.1:8b
     context_length: 8192
-    vram_mb: 2000
+    vram_mb: 2500
     task_types:
       - general
       - document
